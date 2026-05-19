@@ -1,0 +1,11 @@
+{
+    "mcpServers": {
+        "laravel-boost": {
+            "command": "/Users/zengguangyu/.config/herd-lite/bin/php",
+            "args": [
+                "/Users/zengguangyu/Documents/ai_project/ai_auc_admin/artisan",
+                "boost:mcp"
+            ]
+        }
+    }
+}
