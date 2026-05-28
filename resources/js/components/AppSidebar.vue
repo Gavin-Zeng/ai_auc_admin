@@ -48,7 +48,7 @@ const mainNavItems = computed<NavItem[]>(() => {
     if (menus.length === 0) {
         return [
             {
-                title: 'Dashboard',
+                title: '仪表盘',
                 href: dashboard(),
                 icon: LayoutDashboard,
             },

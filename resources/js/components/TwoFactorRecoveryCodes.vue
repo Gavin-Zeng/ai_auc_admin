@@ -42,11 +42,10 @@ onMounted(async () => {
     <Card class="w-full">
         <CardHeader>
             <CardTitle class="flex gap-3">
-                <LockKeyhole class="size-4" />2FA recovery codes
+                <LockKeyhole class="size-4" />2FA 恢复码
             </CardTitle>
             <CardDescription>
-                Recovery codes let you regain access if you lose your 2FA
-                device. Store them in a secure password manager.
+                如果丢失 2FA 设备，可以使用恢复码重新访问账号。请将它们保存在安全的密码管理器中。
             </CardDescription>
         </CardHeader>
         <CardContent>
@@ -58,8 +57,7 @@ onMounted(async () => {
                         :is="isRecoveryCodesVisible ? EyeOff : Eye"
                         class="size-4"
                     />
-                    {{ isRecoveryCodesVisible ? 'Hide' : 'View' }} recovery
-                    codes
+                    {{ isRecoveryCodesVisible ? '隐藏' : '查看' }}恢复码
                 </Button>
 
                 <Form
@@ -75,7 +73,7 @@ onMounted(async () => {
                         type="submit"
                         :disabled="processing"
                     >
-                        <RefreshCw /> Regenerate codes
+                        <RefreshCw /> 重新生成恢复码
                     </Button>
                 </Form>
             </div>
@@ -111,10 +109,8 @@ onMounted(async () => {
                         </div>
                     </div>
                     <p class="text-xs text-muted-foreground select-none">
-                        Each recovery code can be used once to access your
-                        account and will be removed after use. If you need more,
-                        click
-                        <span class="font-bold">Regenerate codes</span> above.
+                        每个恢复码只能使用一次，使用后会被移除。如需更多恢复码，请点击上方的
+                        <span class="font-bold">重新生成恢复码</span>。
                     </p>
                 </div>
             </div>

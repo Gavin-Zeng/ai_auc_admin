@@ -34,7 +34,7 @@ defineProps<Props>();
         <DropdownMenuItem :as-child="true">
             <Link class="block w-full cursor-pointer" :href="edit()" prefetch>
                 <Settings class="mr-2 h-4 w-4" />
-                Settings
+                设置
             </Link>
         </DropdownMenuItem>
     </DropdownMenuGroup>
@@ -48,7 +48,7 @@ defineProps<Props>();
             data-test="logout-button"
         >
             <LogOut class="mr-2 h-4 w-4" />
-            Log out
+            退出登录
         </Link>
     </DropdownMenuItem>
 </template>

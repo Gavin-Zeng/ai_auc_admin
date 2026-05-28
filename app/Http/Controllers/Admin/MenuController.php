@@ -1,0 +1,98 @@
+<?php
+
+namespace App\Http\Controllers\Admin;
+
+use App\Http\Controllers\Admin\Concerns\ManagesResources;
+use App\Http\Controllers\Controller;
+use App\Models\Application;
+use App\Models\Menu;
+use App\Models\Permission;
+use App\Support\PermissionVersion;
+use App\Support\TenantContext;
+use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Http\Request;
+
+class MenuController extends Controller
+{
+    use ManagesResources;
+
+    protected function resourceModel(): string
+    {
+        return Menu::class;
+    }
+
+    protected function resourceQuery(Request $request): Builder
+    {
+        $tenant = app(TenantContext::class)->current() ?? app(TenantContext::class)->resolveForRequest($request);
+
+        return Menu::query()->where('tenant_id', $tenant?->id)->with(['parent', 'application']);
+    }
+
+    protected function resourceConfig(Request $request): array
+    {
+        return [
+            'name' => 'menus',
+            'label' => '菜单管理',
+            'description' => '维护当前租户菜单树、排序、显隐和权限绑定。',
+            'createLabel' => '新增菜单',
+            'storeUrl' => route('menus.store'),
+            'fields' => [
+                ['name' => 'code', 'label' => '编码', 'type' => 'text', 'required' => true],
+                ['name' => 'title', 'label' => '标题', 'type' => 'text', 'required' => true],
+                ['name' => 'href', 'label' => '链接', 'type' => 'text'],
+                ['name' => 'icon', 'label' => '图标', 'type' => 'text'],
+                ['name' => 'parent_id', 'label' => '父级菜单', 'type' => 'select'],
+                ['name' => 'application_id', 'label' => '所属应用', 'type' => 'select'],
+                ['name' => 'required_permissions', 'label' => '所需权限', 'type' => 'multiselect'],
+                ['name' => 'sort_order', 'label' => '排序', 'type' => 'number'],
+                ['name' => 'is_visible', 'label' => '是否显示', 'type' => 'checkbox'],
+                ['name' => 'status', 'label' => '状态', 'type' => 'select', 'options' => ['active', 'disabled']],
+            ],
+            'columns' => ['code', 'title', 'href', 'sort_order', 'is_visible', 'status'],
+        ];
+    }
+
+    protected function resourceOptions(Request $request): array
+    {
+        $tenant = app(TenantContext::class)->current();
+
+        return [
+            'parent_id' => Menu::query()->where('tenant_id', $tenant?->id)->orderBy('sort_order')->get(['id', 'title'])->map(fn (Menu $menu) => ['value' => $menu->id, 'label' => $menu->title])->values(),
+            'application_id' => Application::query()->where('tenant_id', $tenant?->id)->orderBy('name')->get(['id', 'name'])->map(fn (Application $application) => ['value' => $application->id, 'label' => $application->name])->values(),
+            'required_permissions' => Permission::query()->where('status', 'active')->orderBy('code')->pluck('code')->values(),
+        ];
+    }
+
+    protected function rules(Request $request, ?Model $model = null): array
+    {
+        return [
+            'code' => ['required', 'string', 'max:80'],
+            'title' => ['required', 'string', 'max:120'],
+            'href' => ['nullable', 'string', 'max:300'],
+            'icon' => ['nullable', 'string', 'max:120'],
+            'parent_id' => ['nullable', 'integer', 'exists:auc_menus,id'],
+            'application_id' => ['nullable', 'integer', 'exists:auc_applications,id'],
+            'required_permissions' => ['nullable', 'array'],
+            'required_permissions.*' => ['string', 'exists:auc_permissions,code'],
+            'sort_order' => ['nullable', 'integer', 'min:0'],
+            'is_visible' => ['boolean'],
+            'status' => ['required', 'in:active,disabled'],
+        ];
+    }
+
+    protected function prepareData(Request $request, array $data, ?Model $model = null): array
+    {
+        $data['tenant_id'] = app(TenantContext::class)->current()?->id;
+        $data['required_permissions'] ??= [];
+        $data['is_visible'] = $request->boolean('is_visible');
+        $data['sort_order'] ??= 0;
+
+        return $data;
+    }
+
+    protected function afterWrite(Request $request, Model $model, mixed $tenant, PermissionVersion $permissionVersion): void
+    {
+        $permissionVersion->bump($tenant);
+    }
+}

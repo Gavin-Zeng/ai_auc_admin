@@ -20,7 +20,7 @@ defineOptions({
     layout: {
         breadcrumbs: [
             {
-                title: 'AUC Workspace',
+                title: 'AUC 工作台',
                 href: dashboard(),
             },
         ],
@@ -29,20 +29,19 @@ defineOptions({
 </script>
 
 <template>
-    <Head title="AUC Workspace" />
+    <Head title="AUC 工作台" />
 
     <div class="flex h-full flex-1 flex-col gap-6 overflow-x-auto p-4">
         <section class="grid gap-4 lg:grid-cols-[1fr_320px]">
             <div class="space-y-3">
                 <div class="flex flex-wrap items-center gap-2">
                     <h1 class="text-2xl font-semibold tracking-normal">
-                        AUC Workspace
+                        AUC 工作台
                     </h1>
                     <Badge variant="secondary">{{ tenant.name }}</Badge>
                 </div>
                 <p class="max-w-3xl text-sm text-muted-foreground">
-                    Centralized authentication, tenant access, and application
-                    entry points for the current tenant.
+                    当前租户的统一认证、访问权限和业务系统入口。
                 </p>
             </div>
             <div
@@ -50,23 +49,23 @@ defineOptions({
             >
                 <div class="flex items-center gap-2 text-sm font-medium">
                     <ShieldCheck class="size-4" />
-                    Permission snapshot
+                    权限快照
                 </div>
                 <div class="mt-3 grid grid-cols-3 gap-3 text-sm">
                     <div>
-                        <div class="text-muted-foreground">Roles</div>
+                        <div class="text-muted-foreground">角色</div>
                         <div class="font-semibold">
                             {{ identity.roles.length }}
                         </div>
                     </div>
                     <div>
-                        <div class="text-muted-foreground">Permissions</div>
+                        <div class="text-muted-foreground">权限</div>
                         <div class="font-semibold">
                             {{ identity.permissions.length }}
                         </div>
                     </div>
                     <div>
-                        <div class="text-muted-foreground">Version</div>
+                        <div class="text-muted-foreground">版本</div>
                         <div class="font-semibold">
                             {{ identity.permission_version }}
                         </div>
@@ -102,7 +101,7 @@ defineOptions({
             v-if="applications.length === 0"
             class="rounded-lg border border-dashed border-sidebar-border/70 p-8 text-center text-sm text-muted-foreground dark:border-sidebar-border"
         >
-            No accessible applications for the current tenant.
+            当前租户暂无可访问应用。
         </div>
     </div>
 </template>

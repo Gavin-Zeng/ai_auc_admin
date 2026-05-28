@@ -21,12 +21,12 @@ class DatabaseSeeder extends Seeder
         $tenant = Tenant::query()->firstOrCreate([
             'code' => 'default',
         ], [
-            'name' => 'Default Tenant',
+            'name' => '默认租户',
             'status' => 'active',
         ]);
 
         $user = User::factory()->create([
-            'name' => 'Test User',
+            'name' => '测试用户',
             'email' => 'test@example.com',
         ]);
 
@@ -40,12 +40,14 @@ class DatabaseSeeder extends Seeder
         ]);
 
         $permissionCodes = [
-            'dashboard.view' => 'View dashboard',
-            'applications.manage' => 'Manage applications',
-            'users.manage' => 'Manage users',
-            'roles.manage' => 'Manage roles',
-            'menus.manage' => 'Manage menus',
-            'audit_logs.view' => 'View audit logs',
+            'dashboard.view' => '查看工作台',
+            'tenants.manage' => '管理租户',
+            'applications.manage' => '管理应用',
+            'users.manage' => '管理用户',
+            'roles.manage' => '管理角色',
+            'permissions.manage' => '管理权限',
+            'menus.manage' => '管理菜单',
+            'audit_logs.view' => '查看审计日志',
         ];
 
         $permissions = collect($permissionCodes)
@@ -61,7 +63,7 @@ class DatabaseSeeder extends Seeder
             'tenant_id' => $tenant->id,
             'code' => 'admin',
         ], [
-            'name' => 'Administrator',
+            'name' => '管理员',
             'status' => 'active',
             'is_system' => true,
         ]);
@@ -73,11 +75,11 @@ class DatabaseSeeder extends Seeder
             'tenant_id' => $tenant->id,
             'code' => 'auc-admin',
         ], [
-            'name' => 'AUC Admin',
+            'name' => 'AUC 后台',
             'client_id' => 'auc-admin',
             'client_secret' => 'secret',
             'base_url' => config('app.url'),
-            'redirect_uri' => config('app.url').'/sso/callback',
+            'redirect_uri' => config('app.url').'/demo-subsystem/sso/callback',
             'required_permissions' => ['dashboard.view'],
             'status' => 'active',
         ]);
@@ -96,14 +98,14 @@ class DatabaseSeeder extends Seeder
     private function menus(int $tenantId): array
     {
         return [
-            ['tenant_id' => $tenantId, 'code' => 'dashboard', 'title' => 'Dashboard', 'href' => '/dashboard', 'icon' => 'dashboard', 'required_permissions' => ['dashboard.view'], 'sort_order' => 10, 'is_visible' => true, 'status' => 'active'],
-            ['tenant_id' => $tenantId, 'code' => 'tenants', 'title' => 'Tenants', 'href' => '/tenants', 'icon' => 'tenants', 'required_permissions' => ['tenants.manage'], 'sort_order' => 20, 'is_visible' => true, 'status' => 'active'],
-            ['tenant_id' => $tenantId, 'code' => 'users', 'title' => 'Users', 'href' => '/users', 'icon' => 'users', 'required_permissions' => ['users.manage'], 'sort_order' => 30, 'is_visible' => true, 'status' => 'active'],
-            ['tenant_id' => $tenantId, 'code' => 'roles', 'title' => 'Roles', 'href' => '/roles', 'icon' => 'roles', 'required_permissions' => ['roles.manage'], 'sort_order' => 40, 'is_visible' => true, 'status' => 'active'],
-            ['tenant_id' => $tenantId, 'code' => 'permissions', 'title' => 'Permissions', 'href' => '/permissions', 'icon' => 'permissions', 'required_permissions' => ['permissions.manage'], 'sort_order' => 50, 'is_visible' => true, 'status' => 'active'],
-            ['tenant_id' => $tenantId, 'code' => 'menus', 'title' => 'Menus', 'href' => '/menus', 'icon' => 'menus', 'required_permissions' => ['menus.manage'], 'sort_order' => 60, 'is_visible' => true, 'status' => 'active'],
-            ['tenant_id' => $tenantId, 'code' => 'applications', 'title' => 'Applications', 'href' => '/applications', 'icon' => 'applications', 'required_permissions' => ['applications.manage'], 'sort_order' => 70, 'is_visible' => true, 'status' => 'active'],
-            ['tenant_id' => $tenantId, 'code' => 'audit_logs', 'title' => 'Audit Logs', 'href' => '/audit-logs', 'icon' => 'audit_logs', 'required_permissions' => ['audit_logs.view'], 'sort_order' => 80, 'is_visible' => true, 'status' => 'active'],
+            ['tenant_id' => $tenantId, 'code' => 'dashboard', 'title' => '仪表盘', 'href' => '/dashboard', 'icon' => 'dashboard', 'required_permissions' => ['dashboard.view'], 'sort_order' => 10, 'is_visible' => true, 'status' => 'active'],
+            ['tenant_id' => $tenantId, 'code' => 'tenants', 'title' => '租户管理', 'href' => '/tenants', 'icon' => 'tenants', 'required_permissions' => ['tenants.manage'], 'sort_order' => 20, 'is_visible' => true, 'status' => 'active'],
+            ['tenant_id' => $tenantId, 'code' => 'users', 'title' => '用户管理', 'href' => '/users', 'icon' => 'users', 'required_permissions' => ['users.manage'], 'sort_order' => 30, 'is_visible' => true, 'status' => 'active'],
+            ['tenant_id' => $tenantId, 'code' => 'roles', 'title' => '角色管理', 'href' => '/roles', 'icon' => 'roles', 'required_permissions' => ['roles.manage'], 'sort_order' => 40, 'is_visible' => true, 'status' => 'active'],
+            ['tenant_id' => $tenantId, 'code' => 'permissions', 'title' => '权限管理', 'href' => '/permissions', 'icon' => 'permissions', 'required_permissions' => ['permissions.manage'], 'sort_order' => 50, 'is_visible' => true, 'status' => 'active'],
+            ['tenant_id' => $tenantId, 'code' => 'menus', 'title' => '菜单管理', 'href' => '/menus', 'icon' => 'menus', 'required_permissions' => ['menus.manage'], 'sort_order' => 60, 'is_visible' => true, 'status' => 'active'],
+            ['tenant_id' => $tenantId, 'code' => 'applications', 'title' => '应用管理', 'href' => '/applications', 'icon' => 'applications', 'required_permissions' => ['applications.manage'], 'sort_order' => 70, 'is_visible' => true, 'status' => 'active'],
+            ['tenant_id' => $tenantId, 'code' => 'audit_logs', 'title' => '审计日志', 'href' => '/audit-logs', 'icon' => 'audit_logs', 'required_permissions' => ['audit_logs.view'], 'sort_order' => 80, 'is_visible' => true, 'status' => 'active'],
         ];
     }
 }
