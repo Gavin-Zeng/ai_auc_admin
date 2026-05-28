@@ -2,6 +2,8 @@
 
 namespace App\Http\Middleware;
 
+use App\Support\AucAuthorization;
+use App\Support\TenantContext;
 use Illuminate\Http\Request;
 use Inertia\Middleware;
 
@@ -35,11 +37,29 @@ class HandleInertiaRequests extends Middleware
      */
     public function share(Request $request): array
     {
+        $user = $request->user();
+        $tenant = app(TenantContext::class)->current();
+
         return [
             ...parent::share($request),
             'name' => config('app.name'),
             'auth' => [
-                'user' => $request->user(),
+                'user' => $user,
+                'tenant' => $tenant,
+                'tenants' => fn () => $user === null ? [] : $user->tenants()
+                    ->orderBy('name')
+                    ->get(['auc_tenants.id', 'auc_tenants.code', 'auc_tenants.name', 'auc_tenants.status']),
+            ],
+            'auc' => fn () => $user === null || $tenant === null ? [
+                'roles' => [],
+                'permissions' => [],
+                'permission_version' => 1,
+                'menus' => [],
+                'applications' => [],
+            ] : [
+                ...app(AucAuthorization::class)->identity($user, $tenant),
+                'menus' => app(AucAuthorization::class)->menus($user, $tenant),
+                'applications' => app(AucAuthorization::class)->applications($user, $tenant),
             ],
             'sidebarOpen' => ! $request->hasCookie('sidebar_state') || $request->cookie('sidebar_state') === 'true',
         ];

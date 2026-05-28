@@ -1,5 +1,10 @@
 <?php
 
+use App\Models\Permission;
+use App\Models\Role;
+use App\Models\Tenant;
+use App\Models\TenantUser;
+use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
@@ -47,4 +52,28 @@ expect()->extend('toBeOne', function () {
 function something()
 {
     // ..
+}
+
+function aucGrant(User $user, Tenant $tenant, array $permissionCodes): void
+{
+    TenantUser::query()->create([
+        'tenant_id' => $tenant->id,
+        'user_id' => $user->id,
+        'status' => 'active',
+        'permission_version' => 1,
+    ]);
+
+    $role = Role::factory()->create([
+        'tenant_id' => $tenant->id,
+        'code' => 'operator',
+    ]);
+
+    $permissions = collect($permissionCodes)->map(fn (string $code) => Permission::factory()->create([
+        'code' => $code,
+        'name' => $code,
+        'status' => 'active',
+    ]));
+
+    $role->permissions()->sync($permissions->pluck('id')->all());
+    $user->roles()->attach($role->id, ['tenant_id' => $tenant->id]);
 }

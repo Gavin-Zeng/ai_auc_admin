@@ -1,8 +1,18 @@
 <script setup lang="ts">
-import { Link } from '@inertiajs/vue3';
-import { BookOpen, FolderGit2, LayoutGrid } from 'lucide-vue-next';
+import { Link, usePage } from '@inertiajs/vue3';
+import {
+    AppWindow,
+    ClipboardList,
+    KeyRound,
+    LayoutDashboard,
+    ListTree,
+    ScrollText,
+    ShieldCheck,
+    UserCog,
+    Users,
+} from 'lucide-vue-next';
+import { computed } from 'vue';
 import AppLogo from '@/components/AppLogo.vue';
-import NavFooter from '@/components/NavFooter.vue';
 import NavMain from '@/components/NavMain.vue';
 import NavUser from '@/components/NavUser.vue';
 import {
@@ -15,28 +25,42 @@ import {
     SidebarMenuItem,
 } from '@/components/ui/sidebar';
 import { dashboard } from '@/routes';
-import type { NavItem } from '@/types';
+import type { AucMenuItem, NavItem } from '@/types';
 
-const mainNavItems: NavItem[] = [
-    {
-        title: 'Dashboard',
-        href: dashboard(),
-        icon: LayoutGrid,
-    },
-];
+const iconMap = {
+    applications: AppWindow,
+    audit_logs: ClipboardList,
+    dashboard: LayoutDashboard,
+    menus: ListTree,
+    permissions: KeyRound,
+    roles: ShieldCheck,
+    tenants: Users,
+    users: UserCog,
+    default: ScrollText,
+};
 
-const footerNavItems: NavItem[] = [
-    {
-        title: 'Repository',
-        href: 'https://github.com/laravel/vue-starter-kit',
-        icon: FolderGit2,
-    },
-    {
-        title: 'Documentation',
-        href: 'https://laravel.com/docs/starter-kits#vue',
-        icon: BookOpen,
-    },
-];
+const page = usePage();
+
+const mainNavItems = computed<NavItem[]>(() => {
+    const auc = page.props.auc as { menus?: AucMenuItem[] } | undefined;
+    const menus = auc?.menus ?? [];
+
+    if (menus.length === 0) {
+        return [
+            {
+                title: 'Dashboard',
+                href: dashboard(),
+                icon: LayoutDashboard,
+            },
+        ];
+    }
+
+    return menus.map((menu) => ({
+        title: menu.title,
+        href: menu.href ?? dashboard(),
+        icon: iconMap[menu.icon as keyof typeof iconMap] ?? iconMap.default,
+    }));
+});
 </script>
 
 <template>
@@ -58,7 +82,6 @@ const footerNavItems: NavItem[] = [
         </SidebarContent>
 
         <SidebarFooter>
-            <NavFooter :items="footerNavItems" />
             <NavUser />
         </SidebarFooter>
     </Sidebar>

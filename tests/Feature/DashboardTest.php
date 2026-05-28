@@ -1,5 +1,6 @@
 <?php
 
+use App\Models\Tenant;
 use App\Models\User;
 
 test('guests are redirected to the login page', function () {
@@ -8,7 +9,9 @@ test('guests are redirected to the login page', function () {
 });
 
 test('authenticated users can visit the dashboard', function () {
+    $tenant = Tenant::factory()->create();
     $user = User::factory()->create();
+    aucGrant($user, $tenant, ['dashboard.view']);
     $this->actingAs($user);
 
     $response = $this->get(route('dashboard'));

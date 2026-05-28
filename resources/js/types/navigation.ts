@@ -12,3 +12,28 @@ export type NavItem = {
     icon?: LucideIcon;
     isActive?: boolean;
 };
+
+export type AucMenuItem = {
+    id: number;
+    code: string;
+    title: string;
+    href: string | null;
+    icon: string | null;
+    children: AucMenuItem[];
+};
+
+export type AucApplication = {
+    id: number;
+    code: string;
+    name: string;
+    base_url: string;
+    icon: string | null;
+    authorize_url: string;
+};
+
+export type AucTenant = {
+    id: number;
+    code: string;
+    name: string;
+    status: string;
+};
