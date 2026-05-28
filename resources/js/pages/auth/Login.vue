@@ -2,20 +2,16 @@
 import { Form, Head } from '@inertiajs/vue3';
 import InputError from '@/components/InputError.vue';
 import PasswordInput from '@/components/PasswordInput.vue';
-import TextLink from '@/components/TextLink.vue';
 import { Button } from '@/components/ui/button';
-import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Spinner } from '@/components/ui/spinner';
-import { register } from '@/routes';
 import { store } from '@/routes/login';
-import { request } from '@/routes/password';
 
 defineOptions({
     layout: {
-        title: '登录 AUC 后台',
-        description: '请输入邮箱和密码登录',
+        title: 'AUC 后台',
+        description: '',
     },
 });
 
@@ -23,6 +19,9 @@ defineProps<{
     status?: string;
     canResetPassword: boolean;
     canRegister: boolean;
+    captcha: {
+        question: string;
+    };
 }>();
 </script>
 
@@ -38,13 +37,15 @@ defineProps<{
 
     <Form
         v-bind="store.form()"
-        :reset-on-success="['password']"
+        :reset-on-success="['password', 'captcha_answer']"
         v-slot="{ errors, processing }"
         class="flex flex-col gap-6"
     >
+        <input type="hidden" name="remember" value="1" />
+
         <div class="grid gap-6">
             <div class="grid gap-2">
-                <Label for="email">邮箱地址</Label>
+                <Label for="email">账号</Label>
                 <Input
                     id="email"
                     type="email"
@@ -59,17 +60,7 @@ defineProps<{
             </div>
 
             <div class="grid gap-2">
-                <div class="flex items-center justify-between">
-                    <Label for="password">密码</Label>
-                    <TextLink
-                        v-if="canResetPassword"
-                        :href="request()"
-                        class="text-sm"
-                        :tabindex="5"
-                    >
-                        忘记密码？
-                    </TextLink>
-                </div>
+                <Label for="password">密码</Label>
                 <PasswordInput
                     id="password"
                     name="password"
@@ -81,16 +72,32 @@ defineProps<{
                 <InputError :message="errors.password" />
             </div>
 
-            <div class="flex items-center justify-between">
-                <Label for="remember" class="flex items-center space-x-3">
-                    <Checkbox id="remember" name="remember" :tabindex="3" />
-                    <span>记住我</span>
-                </Label>
+            <div class="grid gap-2">
+                <Label for="captcha_answer">验证码</Label>
+                <div class="grid grid-cols-[1fr_96px] gap-3">
+                    <Input
+                        id="captcha_answer"
+                        type="text"
+                        name="captcha_answer"
+                        required
+                        inputmode="numeric"
+                        :tabindex="3"
+                        autocomplete="off"
+                        placeholder="结果"
+                    />
+                    <div
+                        class="flex h-9 items-center justify-center rounded-md border border-input bg-muted px-2 font-mono text-sm whitespace-nowrap text-muted-foreground"
+                        aria-label="验证码题目"
+                    >
+                        {{ captcha.question }}
+                    </div>
+                </div>
+                <InputError :message="errors.captcha_answer" />
             </div>
 
             <Button
                 type="submit"
-                class="mt-4 w-full"
+                class="mt-2 w-full"
                 :tabindex="4"
                 :disabled="processing"
                 data-test="login-button"
@@ -98,14 +105,6 @@ defineProps<{
                 <Spinner v-if="processing" />
                 登录
             </Button>
-        </div>
-
-        <div
-            class="text-center text-sm text-muted-foreground"
-            v-if="canRegister"
-        >
-            还没有账号？
-            <TextLink :href="register()" :tabindex="5">注册</TextLink>
         </div>
     </Form>
 </template>

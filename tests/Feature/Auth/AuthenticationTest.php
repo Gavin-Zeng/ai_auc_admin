@@ -1,21 +1,30 @@
 <?php
 
 use App\Models\User;
+use App\Support\LoginCaptcha;
 use Illuminate\Support\Facades\RateLimiter;
+use Inertia\Testing\AssertableInertia as Assert;
 use Laravel\Fortify\Features;
 
 test('login screen can be rendered', function () {
     $response = $this->get(route('login'));
 
-    $response->assertOk();
+    $response
+        ->assertOk()
+        ->assertInertia(fn (Assert $page) => $page
+            ->component('auth/Login')
+            ->has('captcha.question'));
 });
 
 test('users can authenticate using the login screen', function () {
     $user = User::factory()->create();
 
-    $response = $this->post(route('login.store'), [
+    $response = $this->withSession([
+        LoginCaptcha::SessionAnswerKey => '8',
+    ])->post(route('login.store'), [
         'email' => $user->email,
         'password' => 'password',
+        'captcha_answer' => '8',
     ]);
 
     $this->assertAuthenticated();
@@ -38,9 +47,12 @@ test('users with two factor enabled are redirected to two factor challenge', fun
         'two_factor_confirmed_at' => now(),
     ])->save();
 
-    $response = $this->post(route('login'), [
+    $response = $this->withSession([
+        LoginCaptcha::SessionAnswerKey => '8',
+    ])->post(route('login'), [
         'email' => $user->email,
         'password' => 'password',
+        'captcha_answer' => '8',
     ]);
 
     $response->assertRedirect(route('two-factor.login'));
@@ -48,12 +60,30 @@ test('users with two factor enabled are redirected to two factor challenge', fun
     $this->assertGuest();
 });
 
+test('users can not authenticate with invalid captcha', function () {
+    $user = User::factory()->create();
+
+    $response = $this->withSession([
+        LoginCaptcha::SessionAnswerKey => '8',
+    ])->post(route('login.store'), [
+        'email' => $user->email,
+        'password' => 'password',
+        'captcha_answer' => '9',
+    ]);
+
+    $this->assertGuest();
+    $response->assertSessionHasErrors('captcha_answer');
+});
+
 test('users can not authenticate with invalid password', function () {
     $user = User::factory()->create();
 
-    $this->post(route('login.store'), [
+    $this->withSession([
+        LoginCaptcha::SessionAnswerKey => '8',
+    ])->post(route('login.store'), [
         'email' => $user->email,
         'password' => 'wrong-password',
+        'captcha_answer' => '8',
     ]);
 
     $this->assertGuest();
@@ -73,9 +103,12 @@ test('users are rate limited', function () {
 
     RateLimiter::increment(md5('login'.implode('|', [$user->email, '127.0.0.1'])), amount: 5);
 
-    $response = $this->post(route('login.store'), [
+    $response = $this->withSession([
+        LoginCaptcha::SessionAnswerKey => '8',
+    ])->post(route('login.store'), [
         'email' => $user->email,
         'password' => 'wrong-password',
+        'captcha_answer' => '8',
     ]);
 
     $response->assertTooManyRequests();

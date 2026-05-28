@@ -1,6 +1,7 @@
 <?php
 
 use App\Models\User;
+use App\Support\LoginCaptcha;
 use Inertia\Testing\AssertableInertia as Assert;
 use Laravel\Fortify\Features;
 
@@ -28,9 +29,12 @@ test('two factor challenge can be rendered', function () {
         'two_factor_confirmed_at' => now(),
     ])->save();
 
-    $this->post(route('login'), [
+    $this->withSession([
+        LoginCaptcha::SessionAnswerKey => '8',
+    ])->post(route('login'), [
         'email' => $user->email,
         'password' => 'password',
+        'captcha_answer' => '8',
     ]);
 
     $this->get(route('two-factor.login'))
