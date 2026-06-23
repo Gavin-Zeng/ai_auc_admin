@@ -32,6 +32,12 @@ class SsoController extends Controller
         $tenant = $tenantContext->current() ?? $tenantContext->resolveForRequest($request);
 
         if ($user === null || $tenant === null || ! $tenant->isActive()) {
+            $auditLogger->log($request, 'sso.tenant_unavailable', tenant: $tenant, metadata: [
+                'client_id' => $validated['client_id'],
+                'tenant_id' => $validated['tenant_id'] ?? null,
+                'tenant_code' => $validated['tenant_code'] ?? null,
+            ]);
+
             return $this->errorPage('当前租户不可用，无法发起单点登录。', HttpResponse::HTTP_FORBIDDEN);
         }
 
@@ -41,6 +47,10 @@ class SsoController extends Controller
             ->first();
 
         if ($application === null || ! $application->isActive()) {
+            $auditLogger->log($request, 'sso.application_unavailable', $application, $tenant, [
+                'client_id' => $validated['client_id'],
+            ]);
+
             return $this->errorPage('应用不存在或已停用。', HttpResponse::HTTP_FORBIDDEN);
         }
 
@@ -53,6 +63,10 @@ class SsoController extends Controller
         }
 
         if (! $authorization->canAccessApplication($user, $tenant, $application)) {
+            $auditLogger->log($request, 'sso.application_access_denied', $application, $tenant, [
+                'user_id' => $user->id,
+            ]);
+
             return $this->errorPage('当前用户没有访问该应用的权限。', HttpResponse::HTTP_FORBIDDEN);
         }
 
@@ -86,11 +100,25 @@ class SsoController extends Controller
             ->where('client_id', $validated['client_id'])
             ->first();
 
-        if ($application === null || ! Hash::check($validated['client_secret'], $application->client_secret)) {
+        if ($application === null) {
+            $auditLogger->log($request, 'sso.token_client_not_found', metadata: [
+                'client_id' => $validated['client_id'],
+            ]);
+
+            return $this->tokenError('invalid_client', '客户端凭据无效。', HttpResponse::HTTP_UNAUTHORIZED);
+        }
+
+        if (! Hash::check($validated['client_secret'], $application->client_secret)) {
+            $auditLogger->log($request, 'sso.token_secret_invalid', $application, $application->tenant, [
+                'client_id' => $validated['client_id'],
+            ]);
+
             return $this->tokenError('invalid_client', '客户端凭据无效。', HttpResponse::HTTP_UNAUTHORIZED);
         }
 
         if (! $application->isActive()) {
+            $auditLogger->log($request, 'sso.token_application_disabled', $application, $application->tenant);
+
             return $this->tokenError('application_disabled', '应用已停用。', HttpResponse::HTTP_FORBIDDEN);
         }
 
@@ -109,18 +137,37 @@ class SsoController extends Controller
             ->first();
 
         if ($code === null || $code->redirect_uri !== $validated['redirect_uri']) {
+            $auditLogger->log($request, 'sso.token_code_invalid', $application, $application->tenant, [
+                'code' => $validated['code'],
+            ]);
+
             return $this->tokenError('invalid_code', '授权码无效。', HttpResponse::HTTP_UNPROCESSABLE_ENTITY);
         }
 
         if ($code->used_at !== null) {
+            $auditLogger->log($request, 'sso.token_code_replayed', $application, $code->tenant, [
+                'code_id' => $code->id,
+                'user_id' => $code->user_id,
+            ]);
+
             return $this->tokenError('code_already_used', '授权码已被兑换。', HttpResponse::HTTP_UNPROCESSABLE_ENTITY);
         }
 
         if ($code->expires_at->isPast()) {
+            $auditLogger->log($request, 'sso.token_code_expired', $application, $code->tenant, [
+                'code_id' => $code->id,
+                'user_id' => $code->user_id,
+            ]);
+
             return $this->tokenError('code_expired', '授权码已过期。', HttpResponse::HTTP_UNPROCESSABLE_ENTITY);
         }
 
         if (! $code->tenant->isActive()) {
+            $auditLogger->log($request, 'sso.token_tenant_disabled', $application, $code->tenant, [
+                'code_id' => $code->id,
+                'user_id' => $code->user_id,
+            ]);
+
             return $this->tokenError('tenant_disabled', '租户不可用。', HttpResponse::HTTP_FORBIDDEN);
         }
 

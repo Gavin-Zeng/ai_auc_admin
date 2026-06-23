@@ -3,6 +3,9 @@
 namespace App\Http\Controllers;
 
 use App\Models\Application;
+use App\Models\Tenant;
+use App\Models\User;
+use App\Support\AucAuthorization;
 use App\Support\DemoSubsystemSession;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -57,7 +60,9 @@ class DemoSubsystemController extends Controller
     {
         $identity = $session->identity($request);
 
-        if ($identity === null) {
+        if ($identity === null || $session->isExpired($request)) {
+            $session->forget($request);
+
             return redirect()->route('demo-subsystem.login-required');
         }
 
@@ -72,6 +77,37 @@ class DemoSubsystemController extends Controller
         return Inertia::render('demo-subsystem/Reports', [
             'identity' => $session->identity($request),
         ]);
+    }
+
+    public function refreshPermissions(Request $request, DemoSubsystemSession $session, AucAuthorization $authorization): RedirectResponse
+    {
+        $identity = $session->identity($request);
+
+        if ($identity === null) {
+            return redirect()->route('demo-subsystem.login-required');
+        }
+
+        $user = User::query()->find($identity['auc_user_id'] ?? null);
+        $tenant = Tenant::query()->find(data_get($identity, 'tenant.id'));
+
+        if ($user === null || $tenant === null || ! $tenant->isActive()) {
+            $session->forget($request);
+
+            return redirect()
+                ->route('demo-subsystem.login-required')
+                ->with('status', 'AUC 身份或租户状态已失效，请重新从工作台进入。');
+        }
+
+        $snapshot = $authorization->identity($user, $tenant);
+
+        $session->refresh($request, [
+            'tenant' => $tenant->only(['id', 'code', 'name', 'status']),
+            'roles' => $snapshot['roles'],
+            'permissions' => $snapshot['permissions'],
+            'permission_version' => $snapshot['permission_version'],
+        ]);
+
+        return back()->with('status', '权限快照已刷新。');
     }
 
     public function loginRequired(): Response

@@ -1,8 +1,11 @@
 <?php
 
 use App\Models\Application;
+use App\Models\Permission;
+use App\Models\Role;
 use App\Models\SsoAuthCode;
 use App\Models\Tenant;
+use App\Models\TenantUser;
 use App\Models\User;
 use App\Support\DemoSubsystemSession;
 use Illuminate\Support\Facades\Http;
@@ -74,4 +77,50 @@ test('demo subsystem local permission middleware protects reports', function () 
         ])
         ->get(route('demo-subsystem.reports'))
         ->assertOk();
+});
+
+test('demo subsystem can refresh local permission snapshot when permission version changes', function () {
+    $tenant = Tenant::factory()->create();
+    $user = User::factory()->create();
+    aucGrant($user, $tenant, ['dashboard.view']);
+
+    $role = Role::query()->where('tenant_id', $tenant->id)->firstOrFail();
+    $permission = Permission::factory()->create([
+        'code' => 'reports.export',
+        'name' => 'reports.export',
+        'status' => 'active',
+    ]);
+    $role->permissions()->attach($permission->id);
+    TenantUser::query()
+        ->where('tenant_id', $tenant->id)
+        ->where('user_id', $user->id)
+        ->increment('permission_version');
+
+    $this
+        ->withSession([
+            DemoSubsystemSession::SessionKey => [
+                'auc_user_id' => $user->id,
+                'user' => $user->only(['id', 'name', 'email']),
+                'tenant' => $tenant->only(['id', 'code', 'name', 'status']),
+                'roles' => ['operator'],
+                'permissions' => ['dashboard.view'],
+                'permission_version' => 1,
+                'session_expires_at' => now()->addHour()->toISOString(),
+            ],
+        ])
+        ->post(route('demo-subsystem.permissions.refresh'))
+        ->assertRedirect()
+        ->assertSessionHas(DemoSubsystemSession::SessionKey);
+
+    $identity = session(DemoSubsystemSession::SessionKey);
+
+    expect($identity['permission_version'])->toBe(2)
+        ->and($identity['permissions'])->toContain('dashboard.view')
+        ->and($identity['permissions'])->toContain('reports.export');
+});
+
+test('demo subsystem permission refresh requires local session', function () {
+    $this
+        ->post(route('demo-subsystem.permissions.refresh'))
+        ->assertRedirect(route('demo-subsystem.login-required'));
 });

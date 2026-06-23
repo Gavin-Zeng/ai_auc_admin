@@ -77,6 +77,46 @@ test('application secret can be rotated and audited', function () {
     expect(AuditLog::query()->where('action', 'application.secret_rotated')->exists())->toBeTrue();
 });
 
+test('application changes bump permission version and hide client secret from admin props', function () {
+    $tenant = Tenant::factory()->create();
+    $admin = User::factory()->create();
+    aucGrant($admin, $tenant, ['applications.manage']);
+
+    $application = Application::factory()->create([
+        'tenant_id' => $tenant->id,
+        'client_id' => 'billing-client',
+        'client_secret' => 'visible-once',
+        'required_permissions' => [],
+    ]);
+    $before = TenantUser::query()
+        ->where('tenant_id', $tenant->id)
+        ->where('user_id', $admin->id)
+        ->value('permission_version');
+
+    $this->actingAs($admin)
+        ->put(route('applications.update', $application), [
+            'code' => $application->code,
+            'name' => $application->name,
+            'client_id' => $application->client_id,
+            'base_url' => $application->base_url,
+            'redirect_uri' => $application->redirect_uri,
+            'status' => 'active',
+            'required_permissions' => ['applications.manage'],
+        ])
+        ->assertRedirect();
+
+    expect(TenantUser::query()
+        ->where('tenant_id', $tenant->id)
+        ->where('user_id', $admin->id)
+        ->value('permission_version'))->toBeGreaterThan($before);
+
+    $this->get(route('applications.index'))
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page
+            ->where('items.data.0.client_id', 'billing-client')
+            ->missing('items.data.0.client_secret'));
+});
+
 test('permission snapshot exposes versioned local authorization data', function () {
     $tenant = Tenant::factory()->create();
     $user = User::factory()->create();

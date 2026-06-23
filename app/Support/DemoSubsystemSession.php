@@ -3,6 +3,7 @@
 namespace App\Support;
 
 use Illuminate\Http\Request;
+use Illuminate\Support\Carbon;
 
 class DemoSubsystemSession
 {
@@ -26,9 +27,26 @@ class DemoSubsystemSession
         $request->session()->put(self::SessionKey, $identity);
     }
 
+    public function refresh(Request $request, array $identity): void
+    {
+        $current = $this->identity($request) ?? [];
+
+        $request->session()->put(self::SessionKey, [
+            ...$current,
+            ...$identity,
+        ]);
+    }
+
     public function forget(Request $request): void
     {
         $request->session()->forget(self::SessionKey);
+    }
+
+    public function isExpired(Request $request): bool
+    {
+        $expiresAt = $this->identity($request)['session_expires_at'] ?? null;
+
+        return is_string($expiresAt) && Carbon::parse($expiresAt)->isPast();
     }
 
     public function hasPermission(Request $request, string $permission): bool

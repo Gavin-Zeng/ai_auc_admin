@@ -40,13 +40,14 @@ class UserController extends Controller
             'createLabel' => '新增用户',
             'storeUrl' => route('users.store'),
             'fields' => [
+                ['name' => 'account', 'label' => '账号', 'type' => 'text', 'required' => true],
                 ['name' => 'name', 'label' => '姓名', 'type' => 'text', 'required' => true],
                 ['name' => 'email', 'label' => '邮箱', 'type' => 'text', 'required' => true],
                 ['name' => 'password', 'label' => '密码', 'type' => 'text'],
                 ['name' => 'status', 'label' => '租户成员状态', 'type' => 'select', 'options' => ['active', 'disabled']],
                 ['name' => 'role_ids', 'label' => '角色', 'type' => 'multiselect'],
             ],
-            'columns' => ['name', 'email', 'is_platform_admin'],
+            'columns' => ['account', 'name', 'email', 'is_platform_admin'],
         ];
     }
 
@@ -68,6 +69,7 @@ class UserController extends Controller
     protected function rules(Request $request, ?Model $model = null): array
     {
         return [
+            'account' => ['required', 'string', 'min:2', 'max:18', 'regex:/^[A-Za-z]+$/', $this->unique('auc_users', 'account', $model)],
             'name' => ['required', 'string', 'max:120'],
             'email' => ['required', 'email', 'max:160', $this->unique('auc_users', 'email', $model)],
             'password' => [$model === null ? 'required' : 'nullable', 'string', 'min:8'],

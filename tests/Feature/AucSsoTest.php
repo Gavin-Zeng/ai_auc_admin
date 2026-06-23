@@ -1,6 +1,7 @@
 <?php
 
 use App\Models\Application;
+use App\Models\AuditLog;
 use App\Models\SsoAuthCode;
 use App\Models\Tenant;
 use App\Models\User;
@@ -48,6 +49,8 @@ test('inactive tenant cannot issue an authorization code', function () {
             'tenant_id' => $tenant->id,
         ]))
         ->assertForbidden();
+
+    expect(AuditLog::query()->where('action', 'sso.tenant_unavailable')->exists())->toBeTrue();
 });
 
 test('users without application permissions cannot authorize', function () {
@@ -68,6 +71,8 @@ test('users without application permissions cannot authorize', function () {
             'tenant_id' => $tenant->id,
         ]))
         ->assertForbidden();
+
+    expect(AuditLog::query()->where('action', 'sso.application_access_denied')->exists())->toBeTrue();
 });
 
 test('authorization code can only be exchanged once', function () {
@@ -105,6 +110,8 @@ test('authorization code can only be exchanged once', function () {
 
     $this->postJson(route('sso.token'), $payload)
         ->assertUnprocessable();
+
+    expect(AuditLog::query()->where('action', 'sso.token_code_replayed')->exists())->toBeTrue();
 });
 
 test('expired authorization code cannot be exchanged', function () {
@@ -133,6 +140,28 @@ test('expired authorization code cannot be exchanged', function () {
         'code' => 'expired-code',
         'redirect_uri' => $application->redirect_uri,
     ])->assertUnprocessable();
+
+    expect(AuditLog::query()->where('action', 'sso.token_code_expired')->exists())->toBeTrue();
+});
+
+test('token exchange rejects invalid client secret and audits the failure', function () {
+    $tenant = Tenant::factory()->create();
+
+    $application = Application::factory()->create([
+        'tenant_id' => $tenant->id,
+        'client_secret' => 'plain-secret',
+    ]);
+
+    $this->postJson(route('sso.token'), [
+        'client_id' => $application->client_id,
+        'client_secret' => 'wrong-secret',
+        'code' => 'unused-code',
+        'redirect_uri' => $application->redirect_uri,
+    ])
+        ->assertUnauthorized()
+        ->assertJsonPath('error', 'invalid_client');
+
+    expect(AuditLog::query()->where('action', 'sso.token_secret_invalid')->exists())->toBeTrue();
 });
 
 test('token exchange rejects redirect uri mismatch', function () {
@@ -164,6 +193,8 @@ test('token exchange rejects redirect uri mismatch', function () {
     ])
         ->assertUnprocessable()
         ->assertJsonPath('error', 'redirect_uri_mismatch');
+
+    expect(AuditLog::query()->where('action', 'sso.token_redirect_uri_rejected')->exists())->toBeTrue();
 });
 
 test('disabled application cannot exchange token', function () {
@@ -195,6 +226,40 @@ test('disabled application cannot exchange token', function () {
     ])
         ->assertForbidden()
         ->assertJsonPath('error', 'application_disabled');
+
+    expect(AuditLog::query()->where('action', 'sso.token_application_disabled')->exists())->toBeTrue();
+});
+
+test('disabled tenant cannot exchange token and is audited', function () {
+    $tenant = Tenant::factory()->create(['status' => 'disabled']);
+    $user = User::factory()->create();
+    aucGrant($user, $tenant, ['dashboard.view']);
+
+    $application = Application::factory()->create([
+        'tenant_id' => $tenant->id,
+        'client_secret' => 'plain-secret',
+        'required_permissions' => ['dashboard.view'],
+    ]);
+
+    SsoAuthCode::query()->create([
+        'tenant_id' => $tenant->id,
+        'user_id' => $user->id,
+        'application_id' => $application->id,
+        'code' => 'disabled-tenant-code',
+        'redirect_uri' => $application->redirect_uri,
+        'expires_at' => now()->addMinute(),
+    ]);
+
+    $this->postJson(route('sso.token'), [
+        'client_id' => $application->client_id,
+        'client_secret' => 'plain-secret',
+        'code' => 'disabled-tenant-code',
+        'redirect_uri' => $application->redirect_uri,
+    ])
+        ->assertForbidden()
+        ->assertJsonPath('error', 'tenant_disabled');
+
+    expect(AuditLog::query()->where('action', 'sso.token_tenant_disabled')->exists())->toBeTrue();
 });
 
 test('tenant switch changes navigation and applications', function () {

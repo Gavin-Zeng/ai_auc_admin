@@ -42,7 +42,7 @@ const user = computed(() => page.props.auth.user);
         <Heading
             variant="small"
             title="个人信息"
-            description="更新你的姓名和邮箱地址"
+            description="更新你的账号、姓名和邮箱地址"
         />
 
         <Form
@@ -50,6 +50,20 @@ const user = computed(() => page.props.auth.user);
             class="space-y-6"
             v-slot="{ errors, processing }"
         >
+            <div class="grid gap-2">
+                <Label for="account">账号</Label>
+                <Input
+                    id="account"
+                    class="mt-1 block w-full"
+                    name="account"
+                    :default-value="user.account"
+                    required
+                    autocomplete="username"
+                    placeholder="账号"
+                />
+                <InputError class="mt-2" :message="errors.account" />
+            </div>
+
             <div class="grid gap-2">
                 <Label for="name">姓名</Label>
                 <Input
@@ -73,7 +87,7 @@ const user = computed(() => page.props.auth.user);
                     name="email"
                     :default-value="user.email"
                     required
-                    autocomplete="username"
+                    autocomplete="email"
                     placeholder="邮箱地址"
                 />
                 <InputError class="mt-2" :message="errors.email" />

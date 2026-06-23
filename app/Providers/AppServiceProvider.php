@@ -80,6 +80,7 @@ class AppServiceProvider extends ServiceProvider
             'menus.manage',
             'applications.manage',
             'audit_logs.view',
+            'diagnostics.view',
         ];
     }
 }

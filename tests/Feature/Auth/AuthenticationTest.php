@@ -22,7 +22,7 @@ test('users can authenticate using the login screen', function () {
     $response = $this->withSession([
         LoginCaptcha::SessionAnswerKey => '8',
     ])->post(route('login.store'), [
-        'email' => $user->email,
+        'account' => $user->account,
         'password' => 'password',
         'captcha_answer' => '8',
     ]);
@@ -50,7 +50,7 @@ test('users with two factor enabled are redirected to two factor challenge', fun
     $response = $this->withSession([
         LoginCaptcha::SessionAnswerKey => '8',
     ])->post(route('login'), [
-        'email' => $user->email,
+        'account' => $user->account,
         'password' => 'password',
         'captcha_answer' => '8',
     ]);
@@ -66,7 +66,7 @@ test('users can not authenticate with invalid captcha', function () {
     $response = $this->withSession([
         LoginCaptcha::SessionAnswerKey => '8',
     ])->post(route('login.store'), [
-        'email' => $user->email,
+        'account' => $user->account,
         'password' => 'password',
         'captcha_answer' => '9',
     ]);
@@ -81,7 +81,7 @@ test('users can not authenticate with invalid password', function () {
     $this->withSession([
         LoginCaptcha::SessionAnswerKey => '8',
     ])->post(route('login.store'), [
-        'email' => $user->email,
+        'account' => $user->account,
         'password' => 'wrong-password',
         'captcha_answer' => '8',
     ]);
@@ -101,12 +101,12 @@ test('users can logout', function () {
 test('users are rate limited', function () {
     $user = User::factory()->create();
 
-    RateLimiter::increment(md5('login'.implode('|', [$user->email, '127.0.0.1'])), amount: 5);
+    RateLimiter::increment(md5('login'.implode('|', [strtolower($user->account), '127.0.0.1'])), amount: 5);
 
     $response = $this->withSession([
         LoginCaptcha::SessionAnswerKey => '8',
     ])->post(route('login.store'), [
-        'email' => $user->email,
+        'account' => $user->account,
         'password' => 'wrong-password',
         'captcha_answer' => '8',
     ]);

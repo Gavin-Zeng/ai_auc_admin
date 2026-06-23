@@ -3,6 +3,7 @@ import { Link, usePage } from '@inertiajs/vue3';
 import {
     AppWindow,
     ClipboardList,
+    Gauge,
     KeyRound,
     LayoutDashboard,
     ListTree,
@@ -31,6 +32,7 @@ const iconMap = {
     applications: AppWindow,
     audit_logs: ClipboardList,
     dashboard: LayoutDashboard,
+    diagnostics: Gauge,
     menus: ListTree,
     permissions: KeyRound,
     roles: ShieldCheck,

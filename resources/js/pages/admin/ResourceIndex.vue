@@ -73,6 +73,7 @@ const form = useForm<Record<string, any>>({ ...blankValues.value });
 
 const displayLabels: Record<string, string> = {
     action: '操作',
+    account: '账号',
     application_id: '所属应用',
     base_url: '基础地址',
     client_id: '客户端 ID',

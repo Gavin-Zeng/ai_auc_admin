@@ -19,9 +19,6 @@ const status = usePage().props.status as string | undefined;
                 <h1 class="text-xl font-semibold tracking-normal">
                     子系统尚未建立本地 session
                 </h1>
-                <p class="text-sm text-muted-foreground">
-                    请先在 AUC 工作台点击应用图标，通过 SSO 回调完成免登录接入。
-                </p>
                 <p v-if="status" class="text-sm text-destructive">
                     {{ status }}
                 </p>

@@ -18,6 +18,13 @@ class Application extends Model
     /**
      * @var list<string>
      */
+    protected $hidden = [
+        'client_secret',
+    ];
+
+    /**
+     * @var list<string>
+     */
     protected $fillable = [
         'tenant_id',
         'code',

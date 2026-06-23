@@ -26,6 +26,7 @@ class DatabaseSeeder extends Seeder
         ]);
 
         $user = User::factory()->create([
+            'account' => 'testadmin',
             'name' => '测试用户',
             'email' => 'test@example.com',
         ]);
@@ -48,6 +49,7 @@ class DatabaseSeeder extends Seeder
             'permissions.manage' => '管理权限',
             'menus.manage' => '管理菜单',
             'audit_logs.view' => '查看审计日志',
+            'diagnostics.view' => '查看运维诊断',
         ];
 
         $permissions = collect($permissionCodes)
@@ -106,6 +108,7 @@ class DatabaseSeeder extends Seeder
             ['tenant_id' => $tenantId, 'code' => 'menus', 'title' => '菜单管理', 'href' => '/menus', 'icon' => 'menus', 'required_permissions' => ['menus.manage'], 'sort_order' => 60, 'is_visible' => true, 'status' => 'active'],
             ['tenant_id' => $tenantId, 'code' => 'applications', 'title' => '应用管理', 'href' => '/applications', 'icon' => 'applications', 'required_permissions' => ['applications.manage'], 'sort_order' => 70, 'is_visible' => true, 'status' => 'active'],
             ['tenant_id' => $tenantId, 'code' => 'audit_logs', 'title' => '审计日志', 'href' => '/audit-logs', 'icon' => 'audit_logs', 'required_permissions' => ['audit_logs.view'], 'sort_order' => 80, 'is_visible' => true, 'status' => 'active'],
+            ['tenant_id' => $tenantId, 'code' => 'diagnostics', 'title' => '运维诊断', 'href' => '/diagnostics', 'icon' => 'diagnostics', 'required_permissions' => ['diagnostics.view'], 'sort_order' => 90, 'is_visible' => true, 'status' => 'active'],
         ];
     }
 }

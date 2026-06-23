@@ -1,8 +1,9 @@
 <script setup lang="ts">
 import { Form, Head, Link } from '@inertiajs/vue3';
-import { ShieldCheck } from 'lucide-vue-next';
+import { CheckCircle2, RefreshCw, ShieldCheck } from 'lucide-vue-next';
 import { Button } from '@/components/ui/button';
 import { logout, reports } from '@/routes/demo-subsystem';
+import { refresh } from '@/routes/demo-subsystem/permissions';
 
 defineProps<{
     identity: {
@@ -15,6 +16,17 @@ defineProps<{
     };
     canViewReports: boolean;
 }>();
+
+const checklist = [
+    'client_id / secret',
+    'redirect_uri',
+    'SSO callback',
+    'token exchange',
+    'auc_user_id',
+    'permission snapshot',
+    'local session',
+    'version refresh',
+];
 </script>
 
 <template>
@@ -31,16 +43,22 @@ defineProps<{
                     <h1 class="text-2xl font-semibold tracking-normal">
                         已通过 AUC 建立本地 session
                     </h1>
-                    <p class="text-sm text-muted-foreground">
-                        当前页面读取的是子系统本地 session 中的 AUC 身份和权限快照。
-                    </p>
                 </div>
 
-                <Form v-bind="logout.form()" #default="{ processing }">
-                    <Button variant="secondary" :disabled="processing">
-                        子系统退出
-                    </Button>
-                </Form>
+                <div class="flex flex-wrap gap-2">
+                    <Form v-bind="refresh.form()" #default="{ processing }">
+                        <Button variant="outline" :disabled="processing">
+                            <RefreshCw class="mr-2 size-4" />
+                            刷新权限快照
+                        </Button>
+                    </Form>
+
+                    <Form v-bind="logout.form()" #default="{ processing }">
+                        <Button variant="secondary" :disabled="processing">
+                            子系统退出
+                        </Button>
+                    </Form>
+                </div>
             </div>
 
             <div class="grid gap-4 md:grid-cols-2">
@@ -78,6 +96,20 @@ defineProps<{
                         <div class="font-semibold">
                             {{ identity.permission_version }}
                         </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="rounded-lg border border-sidebar-border/70 p-4">
+                <div class="mb-3 text-sm font-medium">接入检查清单</div>
+                <div class="grid gap-2 text-sm md:grid-cols-2">
+                    <div
+                        v-for="item in checklist"
+                        :key="item"
+                        class="flex items-center gap-2 rounded-md bg-muted/40 px-3 py-2"
+                    >
+                        <CheckCircle2 class="size-4 text-emerald-600" />
+                        <span>{{ item }}</span>
                     </div>
                 </div>
             </div>

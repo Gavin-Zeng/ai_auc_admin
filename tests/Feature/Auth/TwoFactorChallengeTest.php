@@ -32,7 +32,7 @@ test('two factor challenge can be rendered', function () {
     $this->withSession([
         LoginCaptcha::SessionAnswerKey => '8',
     ])->post(route('login'), [
-        'email' => $user->email,
+        'account' => $user->account,
         'password' => 'password',
         'captcha_answer' => '8',
     ]);

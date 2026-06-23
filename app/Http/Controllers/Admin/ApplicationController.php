@@ -7,6 +7,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Application;
 use App\Models\Permission;
 use App\Support\AuditLogger;
+use App\Support\PermissionVersion;
 use App\Support\TenantContext;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
@@ -87,6 +88,11 @@ class ApplicationController extends Controller
         }
 
         return $data;
+    }
+
+    protected function afterWrite(Request $request, Model $model, mixed $tenant, PermissionVersion $permissionVersion): void
+    {
+        $permissionVersion->bump($tenant);
     }
 
     public function rotateSecret(Request $request, Application $application, AuditLogger $auditLogger): RedirectResponse

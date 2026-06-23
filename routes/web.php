@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\Admin\ApplicationController;
 use App\Http\Controllers\Admin\AuditLogController;
+use App\Http\Controllers\Admin\DiagnosticsController;
 use App\Http\Controllers\Admin\MenuController;
 use App\Http\Controllers\Admin\PermissionController;
 use App\Http\Controllers\Admin\RoleController;
@@ -43,6 +44,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::resource('applications', ApplicationController::class)->only(['index', 'store', 'update', 'destroy'])->middleware('can:applications.manage');
     Route::post('applications/{application}/rotate-secret', [ApplicationController::class, 'rotateSecret'])->middleware('can:applications.manage')->name('applications.rotate-secret');
     Route::resource('audit-logs', AuditLogController::class)->only(['index'])->middleware('can:audit_logs.view');
+    Route::get('diagnostics', DiagnosticsController::class)->middleware('can:diagnostics.view')->name('diagnostics.index');
 });
 
 Route::prefix('demo-subsystem')->name('demo-subsystem.')->group(function () {
@@ -50,6 +52,7 @@ Route::prefix('demo-subsystem')->name('demo-subsystem.')->group(function () {
     Route::get('login-required', [DemoSubsystemController::class, 'loginRequired'])->name('login-required');
     Route::get('dashboard', [DemoSubsystemController::class, 'dashboard'])->name('dashboard');
     Route::get('reports', [DemoSubsystemController::class, 'reports'])->middleware('demo.permission:dashboard.view')->name('reports');
+    Route::post('permissions/refresh', [DemoSubsystemController::class, 'refreshPermissions'])->name('permissions.refresh');
     Route::post('auth/auc/logout', [DemoSubsystemController::class, 'logout'])->name('logout');
 });
 
