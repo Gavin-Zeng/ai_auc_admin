@@ -66,7 +66,7 @@ class UserController extends Controller
 
         $fields = [
             ...$fields,
-            ['name' => 'status', 'label' => '成员状态', 'type' => 'select', 'options' => ['active', 'disabled'], 'default' => 'active', 'span' => 1, 'group' => '公司与状态'],
+            ['name' => 'status', 'label' => '成员状态', 'type' => 'select', 'options' => ['active', 'disabled'], 'default' => 'active', 'updateOnly' => true, 'span' => 1, 'group' => '公司与状态'],
             ['name' => 'is_owner', 'label' => '公司超管', 'type' => 'checkbox', 'span' => 1, 'group' => '公司与状态'],
             ['name' => 'role_ids', 'label' => '角色', 'type' => 'multiselect', 'span' => 2, 'group' => '角色授权'],
         ];

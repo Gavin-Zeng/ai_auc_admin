@@ -31,6 +31,28 @@ test('platform admin can create and disable a tenant', function () {
     expect($tenant->refresh()->status)->toBe('disabled');
 });
 
+test('tenant create form hides status and defaults to active', function () {
+    $admin = User::factory()->platformAdmin()->create();
+
+    $this->actingAs($admin)
+        ->get(route('tenants.index'))
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page
+            ->where('resource.label', '公司管理')
+            ->where('resource.fields.3.updateOnly', true)
+            ->where('resource.fields.3.default', 'active'));
+
+    $this->actingAs($admin)
+        ->post(route('tenants.store'), [
+            'code' => 'hidden-status',
+            'name' => 'Hidden Status',
+            'domain' => 'hidden-status.example.test',
+        ])
+        ->assertRedirect();
+
+    expect(Tenant::query()->where('code', 'hidden-status')->value('status'))->toBe('active');
+});
+
 test('company admin cannot promote members to company owner', function () {
     $tenant = Tenant::factory()->create();
     $admin = User::factory()->create();
@@ -277,6 +299,99 @@ test('tenant admin can manage roles and permission version changes', function ()
         ->where('tenant_id', $tenant->id)
         ->where('user_id', $admin->id)
         ->value('permission_version'))->toBeGreaterThan($before);
+});
+
+test('role create form exposes company selector only for platform admin and hides status', function () {
+    $tenant = Tenant::factory()->create(['name' => 'A 公司', 'status' => 'disabled']);
+    $admin = User::factory()->platformAdmin()->create();
+    Role::factory()->create(['tenant_id' => $tenant->id]);
+
+    $this->actingAs($admin)
+        ->get(route('roles.index', ['tenant_id' => $tenant->id]))
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page
+            ->where('resource.createLabel', '新增角色')
+            ->where('resource.fields.2.name', 'tenant_id')
+            ->where('resource.fields.2.label', '所属公司')
+            ->where('resource.fields.2.createOnly', true)
+            ->where('resource.fields.2.group', '公司归属')
+            ->where('resource.fields.3.name', 'status')
+            ->where('resource.fields.3.updateOnly', true)
+            ->where('resource.fields.3.default', 'active')
+            ->where('options.tenant_id.0.label', 'A 公司（已停用）'));
+
+    $user = User::factory()->create();
+    aucGrant($user, $tenant, ['roles.manage']);
+
+    $this->actingAs($user)
+        ->get(route('roles.index'))
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page
+            ->where('resource.fields.0.name', 'code')
+            ->where('resource.fields.1.name', 'name')
+            ->where('resource.fields.2.name', 'status')
+            ->where('resource.fields.2.updateOnly', true)
+            ->where('resource.fields.2.default', 'active')
+            ->where('resource.fields.3.name', 'permission_ids'));
+});
+
+test('platform admin can create role for selected company and company admin cannot spoof company', function () {
+    $tenant = Tenant::factory()->create();
+    $otherTenant = Tenant::factory()->create();
+    $platformAdmin = User::factory()->platformAdmin()->create();
+    $companyAdmin = User::factory()->create();
+    aucGrant($companyAdmin, $tenant, ['roles.manage']);
+    $permission = Permission::factory()->create(['status' => 'active']);
+
+    $this->actingAs($platformAdmin)
+        ->post(route('roles.store', ['tenant_id' => $otherTenant->id]), [
+            'tenant_id' => $otherTenant->id,
+            'code' => 'planner',
+            'name' => 'Planner',
+            'permission_ids' => [$permission->id],
+        ])
+        ->assertRedirect();
+
+    expect(Role::query()->where('tenant_id', $otherTenant->id)->where('code', 'planner')->exists())->toBeTrue();
+
+    $this->actingAs($companyAdmin)
+        ->post(route('roles.store'), [
+            'tenant_id' => $otherTenant->id,
+            'code' => 'spoofed',
+            'name' => 'Spoofed',
+            'permission_ids' => [$permission->id],
+        ])
+        ->assertForbidden();
+
+    expect(Role::query()->where('code', 'spoofed')->exists())->toBeFalse();
+});
+
+test('resources create forms do not expose status and still save active by default', function () {
+    $tenant = Tenant::factory()->create();
+    $admin = User::factory()->platformAdmin()->create();
+    aucGrant($admin, $tenant, ['applications.manage', 'permissions.manage', 'menus.manage']);
+
+    $this->actingAs($admin)
+        ->get(route('applications.index'))
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page
+            ->where('resource.fields.7.updateOnly', true)
+            ->where('resource.fields.7.default', 'active'));
+
+    $application = Application::factory()->make(['tenant_id' => $tenant->id]);
+    $this->actingAs($admin)
+        ->post(route('applications.store'), [
+            'code' => $application->code,
+            'name' => $application->name,
+            'client_id' => $application->client_id,
+            'client_secret' => 'secret123',
+            'base_url' => $application->base_url,
+            'redirect_uri' => $application->redirect_uri,
+            'required_permissions' => [],
+        ])
+        ->assertRedirect();
+
+    expect(Application::query()->where('client_id', $application->client_id)->value('status'))->toBe('active');
 });
 
 test('role management list includes company name', function () {
@@ -526,7 +641,7 @@ test('operation logs show enriched fields and can be filtered by action', functi
             ->where('items.data.0.operator_name', $admin->name)
             ->where('items.data.0.company_name', $tenant->name)
             ->where('items.data.0.system_name', '订单系统')
-            ->where('items.data.0.operation_action', 'sso.code_issued')
+            ->where('items.data.0.operation_action', '签发授权码')
             ->where('items.data.0.operation_object', 'Application#'.$application->id)
             ->where('items.data.0.request_params', '{"client_id":"orders"}')
             ->where('items.data.0.ip_address', '127.0.0.1')
@@ -586,7 +701,7 @@ test('company admin can only see current company operation logs', function () {
         ->assertInertia(fn ($page) => $page
             ->has('items.data', 1)
             ->where('items.data.0.company_name', 'A 公司')
-            ->where('items.data.0.operation_action', 'tenant.updated'));
+            ->where('items.data.0.operation_action', '更新公司'));
 
     $this->get(route('audit-logs.index', ['tenant_id' => $otherTenant->id]))
         ->assertForbidden();

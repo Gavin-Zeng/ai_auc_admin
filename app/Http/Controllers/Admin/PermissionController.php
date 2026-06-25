@@ -29,12 +29,12 @@ class PermissionController extends Controller
             'createLabel' => '新增权限',
             'storeUrl' => route('permissions.store'),
             'fields' => [
-                ['name' => 'code', 'label' => '编码', 'type' => 'text', 'required' => true],
-                ['name' => 'name', 'label' => '名称', 'type' => 'text', 'required' => true],
-                ['name' => 'application_id', 'label' => '所属系统', 'type' => 'select'],
-                ['name' => 'group', 'label' => '分组', 'type' => 'text'],
-                ['name' => 'status', 'label' => '状态', 'type' => 'select', 'options' => ['active', 'disabled']],
-                ['name' => 'description', 'label' => '描述', 'type' => 'textarea'],
+                ['name' => 'code', 'label' => '编码', 'type' => 'text', 'required' => true, 'span' => 1, 'group' => '基础信息'],
+                ['name' => 'name', 'label' => '名称', 'type' => 'text', 'required' => true, 'span' => 1, 'group' => '基础信息'],
+                ['name' => 'application_id', 'label' => '所属系统', 'type' => 'select', 'span' => 1, 'group' => '归属'],
+                ['name' => 'group', 'label' => '分组', 'type' => 'text', 'span' => 1, 'group' => '归属'],
+                ['name' => 'status', 'label' => '状态', 'type' => 'select', 'options' => ['active', 'disabled'], 'default' => 'active', 'updateOnly' => true, 'span' => 1, 'group' => '状态'],
+                ['name' => 'description', 'label' => '描述', 'type' => 'textarea', 'span' => 2, 'group' => '补充信息'],
             ],
             'columns' => ['code', 'name', 'application_id', 'group', 'status'],
         ];
@@ -64,13 +64,15 @@ class PermissionController extends Controller
             'code' => ['required', 'string', 'max:120', $this->unique('auc_permissions', 'code', $model)],
             'name' => ['required', 'string', 'max:120'],
             'group' => ['nullable', 'string', 'max:80'],
-            'status' => ['required', 'in:active,disabled'],
+            'status' => [$model === null ? 'nullable' : 'required', 'in:active,disabled'],
             'description' => ['nullable', 'string', 'max:1000'],
         ];
     }
 
     protected function prepareData(Request $request, array $data, ?Model $model = null): array
     {
+        $data['status'] ??= 'active';
+
         $tenant = app(TenantContext::class)->current();
 
         if (($data['application_id'] ?? null) !== null) {

@@ -45,15 +45,15 @@ class ApplicationController extends Controller
             'createLabel' => '新增系统',
             'storeUrl' => route('applications.store'),
             'fields' => [
-                ['name' => 'code', 'label' => '编码', 'type' => 'text', 'required' => true],
-                ['name' => 'name', 'label' => '名称', 'type' => 'text', 'required' => true],
-                ['name' => 'client_id', 'label' => '客户端 ID', 'type' => 'text', 'required' => true],
-                ['name' => 'client_secret', 'label' => '客户端密钥', 'type' => 'text'],
-                ['name' => 'base_url', 'label' => '基础地址', 'type' => 'text', 'required' => true],
-                ['name' => 'redirect_uri', 'label' => '回调地址', 'type' => 'text', 'required' => true],
-                ['name' => 'icon', 'label' => '图标', 'type' => 'text'],
-                ['name' => 'status', 'label' => '状态', 'type' => 'select', 'options' => ['active', 'disabled']],
-                ['name' => 'required_permissions', 'label' => '所需权限', 'type' => 'multiselect'],
+                ['name' => 'code', 'label' => '编码', 'type' => 'text', 'required' => true, 'span' => 1, 'group' => '基础信息'],
+                ['name' => 'name', 'label' => '名称', 'type' => 'text', 'required' => true, 'span' => 1, 'group' => '基础信息'],
+                ['name' => 'client_id', 'label' => '客户端 ID', 'type' => 'text', 'required' => true, 'span' => 1, 'group' => 'SSO 配置'],
+                ['name' => 'client_secret', 'label' => '客户端密钥', 'type' => 'text', 'span' => 1, 'group' => 'SSO 配置'],
+                ['name' => 'base_url', 'label' => '基础地址', 'type' => 'text', 'required' => true, 'span' => 1, 'group' => '地址配置'],
+                ['name' => 'redirect_uri', 'label' => '回调地址', 'type' => 'text', 'required' => true, 'span' => 1, 'group' => '地址配置'],
+                ['name' => 'icon', 'label' => '图标', 'type' => 'text', 'span' => 1, 'group' => '展示'],
+                ['name' => 'status', 'label' => '状态', 'type' => 'select', 'options' => ['active', 'disabled'], 'default' => 'active', 'updateOnly' => true, 'span' => 1, 'group' => '展示'],
+                ['name' => 'required_permissions', 'label' => '所需权限', 'type' => 'multiselect', 'span' => 2, 'group' => '授权'],
             ],
             'columns' => ['code', 'name', 'client_id', 'base_url', 'status'],
             'actions' => ['rotateSecret'],
@@ -121,7 +121,7 @@ class ApplicationController extends Controller
             'base_url' => ['required', 'url', 'max:500'],
             'redirect_uri' => ['required', 'url', 'max:500'],
             'icon' => ['nullable', 'string', 'max:120'],
-            'status' => ['required', 'in:active,disabled'],
+            'status' => [$model === null ? 'nullable' : 'required', 'in:active,disabled'],
             'required_permissions' => ['nullable', 'array'],
             'required_permissions.*' => ['string', 'exists:auc_permissions,code'],
         ];
@@ -131,6 +131,7 @@ class ApplicationController extends Controller
     {
         $data['tenant_id'] = app(TenantContext::class)->current()?->id;
         $data['required_permissions'] ??= [];
+        $data['status'] ??= 'active';
 
         if (($data['client_secret'] ?? null) === null && $model !== null) {
             unset($data['client_secret']);

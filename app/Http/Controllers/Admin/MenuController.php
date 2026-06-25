@@ -39,16 +39,16 @@ class MenuController extends Controller
             'createLabel' => '新增菜单',
             'storeUrl' => route('menus.store'),
             'fields' => [
-                ['name' => 'code', 'label' => '编码', 'type' => 'text', 'required' => true],
-                ['name' => 'title', 'label' => '标题', 'type' => 'text', 'required' => true],
-                ['name' => 'href', 'label' => '链接', 'type' => 'text'],
-                ['name' => 'icon', 'label' => '图标', 'type' => 'text'],
-                ['name' => 'parent_id', 'label' => '父级菜单', 'type' => 'select'],
-                ['name' => 'application_id', 'label' => '所属系统', 'type' => 'select'],
-                ['name' => 'required_permissions', 'label' => '所需权限', 'type' => 'multiselect'],
-                ['name' => 'sort_order', 'label' => '排序', 'type' => 'number'],
-                ['name' => 'is_visible', 'label' => '是否显示', 'type' => 'checkbox'],
-                ['name' => 'status', 'label' => '状态', 'type' => 'select', 'options' => ['active', 'disabled']],
+                ['name' => 'code', 'label' => '编码', 'type' => 'text', 'required' => true, 'span' => 1, 'group' => '基础信息'],
+                ['name' => 'title', 'label' => '标题', 'type' => 'text', 'required' => true, 'span' => 1, 'group' => '基础信息'],
+                ['name' => 'href', 'label' => '链接', 'type' => 'text', 'span' => 1, 'group' => '展示'],
+                ['name' => 'icon', 'label' => '图标', 'type' => 'text', 'span' => 1, 'group' => '展示'],
+                ['name' => 'parent_id', 'label' => '父级菜单', 'type' => 'select', 'span' => 1, 'group' => '归属'],
+                ['name' => 'application_id', 'label' => '所属系统', 'type' => 'select', 'span' => 1, 'group' => '归属'],
+                ['name' => 'required_permissions', 'label' => '所需权限', 'type' => 'multiselect', 'span' => 2, 'group' => '授权'],
+                ['name' => 'sort_order', 'label' => '排序', 'type' => 'number', 'span' => 1, 'group' => '状态'],
+                ['name' => 'is_visible', 'label' => '是否显示', 'type' => 'checkbox', 'span' => 1, 'group' => '状态'],
+                ['name' => 'status', 'label' => '状态', 'type' => 'select', 'options' => ['active', 'disabled'], 'default' => 'active', 'updateOnly' => true, 'span' => 1, 'group' => '状态'],
             ],
             'columns' => ['code', 'title', 'system_name', 'href', 'sort_order', 'is_visible', 'status'],
         ];
@@ -85,7 +85,7 @@ class MenuController extends Controller
             'required_permissions.*' => ['string', 'exists:auc_permissions,code'],
             'sort_order' => ['nullable', 'integer', 'min:0'],
             'is_visible' => ['boolean'],
-            'status' => ['required', 'in:active,disabled'],
+            'status' => [$model === null ? 'nullable' : 'required', 'in:active,disabled'],
         ];
     }
 
@@ -96,6 +96,7 @@ class MenuController extends Controller
         $data['required_permissions'] ??= [];
         $data['is_visible'] = $request->boolean('is_visible');
         $data['sort_order'] ??= 0;
+        $data['status'] ??= 'active';
 
         if (($data['parent_id'] ?? null) !== null) {
             abort_unless(Menu::query()

@@ -29,6 +29,7 @@ type FieldConfig = {
     options?: FieldOption[];
     default?: unknown;
     createOnly?: boolean;
+    updateOnly?: boolean;
     span?: 1 | 2;
     group?: string;
 };
@@ -64,13 +65,11 @@ const search = ref(props.filters.search ?? '');
 const page = usePage();
 const rotatedSecret = computed(() => page.props.secret as string | undefined);
 const visibleFields = computed(() =>
-    props.resource.fields.filter((field) => !editing.value || !field.createOnly),
+    props.resource.fields.filter((field) =>
+        editing.value ? !field.createOnly : !field.updateOnly,
+    ),
 );
-const formPanelClass = computed(() =>
-    props.resource.name === 'users'
-        ? 'max-w-3xl'
-        : 'max-w-none',
-);
+const formPanelClass = computed(() => 'max-w-4xl');
 
 const blankValues = computed(() =>
     Object.fromEntries(
@@ -281,7 +280,7 @@ function toggleMulti(field: FieldConfig, value: string) {
 }
 
 function fieldClass(field: FieldConfig): string {
-    return field.span === 2 ? 'space-y-2 md:col-span-2' : 'space-y-2';
+    return field.span === 2 ? 'space-y-1.5 md:col-span-2' : 'space-y-1.5';
 }
 
 function statusBadgeClass(item: Record<string, any>, column: string): string {
@@ -412,7 +411,7 @@ watch(
         <form
             v-if="showForm && !resource.readOnly"
             :class="[
-                'grid gap-3 rounded-lg border border-sidebar-border/70 bg-card/40 p-4 md:grid-cols-2 dark:border-sidebar-border',
+                'grid gap-2 rounded-lg border border-sidebar-border/70 bg-card/40 p-3 md:grid-cols-2 dark:border-sidebar-border',
                 formPanelClass,
             ]"
             @submit.prevent="submit"
@@ -422,18 +421,18 @@ watch(
                 :key="field.name"
                 :class="fieldClass(field)"
             >
-                <Label :for="field.name" class="text-xs">{{ field.label }}</Label>
+                <Label :for="field.name" class="text-xs font-medium">{{ field.label }}</Label>
 
                 <textarea
                     v-if="field.type === 'textarea'"
                     :id="field.name"
                     v-model="form[field.name]"
-                    class="border-input min-h-20 w-full rounded-md border bg-transparent px-3 py-2 text-sm"
+                    class="border-input min-h-16 w-full rounded-md border bg-transparent px-3 py-2 text-sm"
                 />
 
                 <div
                     v-else-if="field.type === 'checkbox'"
-                    class="flex h-9 items-center gap-2"
+                    class="flex h-8 items-center gap-2"
                 >
                     <Checkbox
                         :id="field.name"
@@ -463,7 +462,7 @@ watch(
 
                 <div
                     v-else-if="field.type === 'multiselect'"
-                    class="max-h-32 min-h-20 space-y-2 overflow-y-auto rounded-md border border-sidebar-border/70 bg-background/60 p-3"
+                    class="max-h-28 min-h-16 space-y-1.5 overflow-y-auto rounded-md border border-sidebar-border/70 bg-background/60 p-2.5"
                 >
                     <label
                         v-for="option in fieldOptions(field)"
@@ -502,7 +501,7 @@ watch(
                 </div>
             </div>
 
-            <div class="flex gap-2 border-t border-sidebar-border/70 pt-3 md:col-span-2">
+            <div class="flex gap-2 border-t border-sidebar-border/70 pt-2 md:col-span-2">
                 <Button type="submit" :disabled="form.processing">
                     {{ editing ? '更新' : '创建' }}
                 </Button>

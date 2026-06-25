@@ -69,7 +69,7 @@ class AuditLogController extends Controller
                 'operated_at' => $log->created_at?->format('Y-m-d H:i:s') ?? '-',
                 'company_name' => $log->tenant?->name ?? '-',
                 'system_name' => $systemNames[$log->id] ?? '-',
-                'operation_action' => $log->action,
+                'operation_action' => $this->operationAction($log->action),
                 'operation_object' => $this->operationObject($log),
                 'request_params' => $this->requestParams($metadata),
                 'ip_address' => $log->ip_address ?? '-',
@@ -86,15 +86,15 @@ class AuditLogController extends Controller
     private function systemNames(Collection $logs): array
     {
         $applicationIds = $logs
-            ->filter(fn (AuditLog $log) => $log->subject_type === Application::class && $log->subject_id !== null)
+            ->filter(fn (AuditLog $log) => $this->matchesSubjectType($log, Application::class) && $log->subject_id !== null)
             ->pluck('subject_id')
             ->all();
         $menuIds = $logs
-            ->filter(fn (AuditLog $log) => $log->subject_type === Menu::class && $log->subject_id !== null)
+            ->filter(fn (AuditLog $log) => $this->matchesSubjectType($log, Menu::class) && $log->subject_id !== null)
             ->pluck('subject_id')
             ->all();
         $permissionIds = $logs
-            ->filter(fn (AuditLog $log) => $log->subject_type === Permission::class && $log->subject_id !== null)
+            ->filter(fn (AuditLog $log) => $this->matchesSubjectType($log, Permission::class) && $log->subject_id !== null)
             ->pluck('subject_id')
             ->all();
 
@@ -114,16 +114,30 @@ class AuditLogController extends Controller
 
         return $logs
             ->mapWithKeys(function (AuditLog $log) use ($applications, $menus, $permissions): array {
-                $name = match ($log->subject_type) {
-                    Application::class => $applications->get($log->subject_id, '-'),
-                    Menu::class => $menus->get($log->subject_id, '-'),
-                    Permission::class => $permissions->get($log->subject_id, '-'),
-                    default => '-',
-                };
+                $name = '-';
+
+                if ($this->matchesSubjectType($log, Application::class)) {
+                    $name = $applications->get($log->subject_id, '-');
+                } elseif ($this->matchesSubjectType($log, Menu::class)) {
+                    $name = $menus->get($log->subject_id, '-');
+                } elseif ($this->matchesSubjectType($log, Permission::class)) {
+                    $name = $permissions->get($log->subject_id, '-');
+                }
 
                 return [$log->id => $name];
             })
             ->all();
+    }
+
+    private function matchesSubjectType(AuditLog $log, string $class): bool
+    {
+        if ($log->subject_type === null) {
+            return false;
+        }
+
+        return $log->subject_type === $class
+            || $log->subject_type === class_basename($class)
+            || class_basename($log->subject_type) === class_basename($class);
     }
 
     private function operationObject(AuditLog $log): string
@@ -133,6 +147,47 @@ class AuditLogController extends Controller
         }
 
         return class_basename($log->subject_type).'#'.$log->subject_id;
+    }
+
+    private function operationAction(string $action): string
+    {
+        return match ($action) {
+            'sso.tenant_unavailable' => '租户不可用',
+            'sso.application_unavailable' => '应用不可用',
+            'sso.redirect_uri_rejected' => '回调地址被拒绝',
+            'sso.application_access_denied' => '应用访问被拒绝',
+            'sso.code_issued' => '签发授权码',
+            'sso.token_client_not_found' => '客户端不存在',
+            'sso.token_secret_invalid' => '客户端密钥无效',
+            'sso.token_application_disabled' => '应用已停用',
+            'sso.token_redirect_uri_rejected' => '回调地址不匹配',
+            'sso.token_code_invalid' => '授权码无效',
+            'sso.token_code_replayed' => '授权码重复兑换',
+            'sso.token_code_expired' => '授权码已过期',
+            'sso.token_tenant_disabled' => '租户已停用',
+            'sso.code_exchanged' => '兑换授权码',
+            'sso.logout_requested' => '请求退出',
+            'application.secret_rotated' => '轮换系统密钥',
+            'tenant.created' => '创建公司',
+            'tenant.updated' => '更新公司',
+            'tenant.disabled' => '停用公司',
+            'role.created' => '创建角色',
+            'role.updated' => '更新角色',
+            'role.disabled' => '停用角色',
+            'permission.created' => '创建权限',
+            'permission.updated' => '更新权限',
+            'permission.disabled' => '停用权限',
+            'menu.created' => '创建菜单',
+            'menu.updated' => '更新菜单',
+            'menu.disabled' => '停用菜单',
+            'application.created' => '创建系统',
+            'application.updated' => '更新系统',
+            'application.disabled' => '停用系统',
+            'user.created' => '创建账号',
+            'user.updated' => '更新账号',
+            'user.disabled' => '停用账号',
+            default => $action,
+        };
     }
 
     /**
