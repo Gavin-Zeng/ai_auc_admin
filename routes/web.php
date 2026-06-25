@@ -41,7 +41,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::resource('roles', RoleController::class)->only(['index', 'store', 'update', 'destroy'])->middleware('can:roles.manage');
     Route::resource('permissions', PermissionController::class)->only(['index', 'store', 'update', 'destroy'])->middleware('can:permissions.manage');
     Route::resource('menus', MenuController::class)->only(['index', 'store', 'update', 'destroy'])->middleware('can:menus.manage');
-    Route::resource('applications', ApplicationController::class)->only(['index', 'store', 'update', 'destroy'])->middleware('can:applications.manage');
+    Route::resource('applications', ApplicationController::class)->only(['index', 'show', 'store', 'update', 'destroy'])->middleware('can:applications.manage');
     Route::post('applications/{application}/rotate-secret', [ApplicationController::class, 'rotateSecret'])->middleware('can:applications.manage')->name('applications.rotate-secret');
     Route::resource('audit-logs', AuditLogController::class)->only(['index'])->middleware('can:audit_logs.view');
     Route::get('diagnostics', DiagnosticsController::class)->middleware('can:diagnostics.view')->name('diagnostics.index');

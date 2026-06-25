@@ -5,7 +5,9 @@ namespace App\Http\Controllers\Admin;
 use App\Http\Controllers\Admin\Concerns\ManagesResources;
 use App\Http\Controllers\Controller;
 use App\Models\Application;
+use App\Models\Menu;
 use App\Models\Permission;
+use App\Models\Role;
 use App\Support\AuditLogger;
 use App\Support\PermissionVersion;
 use App\Support\TenantContext;
@@ -13,7 +15,10 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Str;
+use Inertia\Inertia;
+use Inertia\Response;
 
 class ApplicationController extends Controller
 {
@@ -35,9 +40,9 @@ class ApplicationController extends Controller
     {
         return [
             'name' => 'applications',
-            'label' => '应用管理',
+            'label' => '系统管理',
             'description' => '配置业务系统的 SSO 接入地址、密钥和访问权限。',
-            'createLabel' => '新增应用',
+            'createLabel' => '新增系统',
             'storeUrl' => route('applications.store'),
             'fields' => [
                 ['name' => 'code', 'label' => '编码', 'type' => 'text', 'required' => true],
@@ -58,8 +63,52 @@ class ApplicationController extends Controller
     protected function resourceOptions(Request $request): array
     {
         return [
-            'required_permissions' => Permission::query()->orderBy('code')->pluck('code')->values(),
+            'required_permissions' => Permission::query()
+                ->where(function (Builder $query): void {
+                    $query->whereNull('application_id')
+                        ->orWhereIn('application_id', Application::query()
+                            ->where('tenant_id', app(TenantContext::class)->current()?->id)
+                            ->select('id'));
+                })
+                ->orderBy('code')
+                ->pluck('code')
+                ->values(),
         ];
+    }
+
+    public function show(Request $request, Application $application, TenantContext $tenantContext): Response
+    {
+        $tenant = $tenantContext->current() ?? $tenantContext->resolveForRequest($request);
+        abort_if($tenant === null, 403);
+        $this->authorizeResourceModel($application, $tenant);
+
+        $permissions = Permission::query()
+            ->where('application_id', $application->id)
+            ->orderBy('group')
+            ->orderBy('code')
+            ->get(['id', 'application_id', 'code', 'name', 'group', 'status', 'description']);
+
+        $menus = Menu::query()
+            ->where('tenant_id', $tenant->id)
+            ->where('application_id', $application->id)
+            ->orderBy('sort_order')
+            ->get(['id', 'parent_id', 'code', 'title', 'href', 'icon', 'required_permissions', 'sort_order', 'is_visible', 'status']);
+
+        return Inertia::render('admin/ApplicationShow', [
+            'application' => [
+                ...$application->only(['id', 'tenant_id', 'code', 'name', 'client_id', 'base_url', 'redirect_uri', 'icon', 'required_permissions', 'status']),
+                'secret_configured' => filled($application->client_secret),
+            ],
+            'tenant' => $tenant->only(['id', 'code', 'name', 'status']),
+            'permissions' => $permissions,
+            'menus' => $this->buildMenuTree($menus, null),
+            'flatMenus' => $menus->values(),
+            'authorization' => [
+                'required_permissions' => $application->required_permissions ?? [],
+                'roles' => $this->authorizedRoles($tenant->id, $application->required_permissions ?? []),
+            ],
+            'checks' => $this->integrationChecks($application, $tenant),
+        ]);
     }
 
     protected function rules(Request $request, ?Model $model = null): array
@@ -105,5 +154,85 @@ class ApplicationController extends Controller
         $auditLogger->log($request, 'application.secret_rotated', $application, $tenant);
 
         return back()->with('secret', $secret);
+    }
+
+    /**
+     * @param  Collection<int, Menu>  $menus
+     * @return list<array<string, mixed>>
+     */
+    private function buildMenuTree(Collection $menus, ?int $parentId): array
+    {
+        return $menus
+            ->where('parent_id', $parentId)
+            ->map(fn (Menu $menu) => [
+                'id' => $menu->id,
+                'parent_id' => $menu->parent_id,
+                'code' => $menu->code,
+                'title' => $menu->title,
+                'href' => $menu->href,
+                'icon' => $menu->icon,
+                'required_permissions' => $menu->required_permissions ?? [],
+                'sort_order' => $menu->sort_order,
+                'is_visible' => $menu->is_visible,
+                'status' => $menu->status,
+                'children' => $this->buildMenuTree($menus, $menu->id),
+            ])
+            ->values()
+            ->all();
+    }
+
+    /**
+     * @param  list<string>  $requiredPermissions
+     * @return list<array{id: int, code: string, name: string, status: string}>
+     */
+    private function authorizedRoles(int $tenantId, array $requiredPermissions): array
+    {
+        if ($requiredPermissions === []) {
+            return [];
+        }
+
+        return Role::query()
+            ->where('tenant_id', $tenantId)
+            ->where('status', 'active')
+            ->whereHas('permissions', fn (Builder $query) => $query->whereIn('auc_permissions.code', $requiredPermissions))
+            ->orderBy('code')
+            ->get(['id', 'code', 'name', 'status'])
+            ->map(fn (Role $role) => $role->only(['id', 'code', 'name', 'status']))
+            ->values()
+            ->all();
+    }
+
+    /**
+     * @return list<array{label: string, passed: bool, message: string}>
+     */
+    private function integrationChecks(Application $application, mixed $tenant): array
+    {
+        return [
+            [
+                'label' => '系统状态',
+                'passed' => $application->isActive(),
+                'message' => $application->isActive() ? '系统已启用' : '系统已停用，无法发起 SSO。',
+            ],
+            [
+                'label' => '公司状态',
+                'passed' => $tenant->isActive(),
+                'message' => $tenant->isActive() ? '当前公司可用' : '当前公司已停用，无法签发 code。',
+            ],
+            [
+                'label' => '客户端 ID',
+                'passed' => filled($application->client_id),
+                'message' => filled($application->client_id) ? '已配置 client_id' : '缺少 client_id。',
+            ],
+            [
+                'label' => '客户端密钥',
+                'passed' => filled($application->client_secret),
+                'message' => filled($application->client_secret) ? '已配置 secret，明文不可查看' : '缺少 secret，请轮换生成。',
+            ],
+            [
+                'label' => '回调地址',
+                'passed' => filled($application->redirect_uri),
+                'message' => filled($application->redirect_uri) ? '已配置 redirect_uri' : '缺少 redirect_uri。',
+            ],
+        ];
     }
 }

@@ -27,7 +27,7 @@ const props = defineProps<{
             <div>
                 <h1 class="text-xl font-semibold tracking-normal">运维诊断</h1>
                 <p class="text-sm text-muted-foreground">
-                    检查默认租户、管理员、权限、菜单、应用和 SSO 接入配置。
+                    检查默认公司、管理员、权限、菜单、应用和 SSO 接入配置。
                 </p>
             </div>
             <Badge :variant="props.report.passed ? 'secondary' : 'destructive'">

@@ -54,18 +54,23 @@ function something()
     // ..
 }
 
-function aucGrant(User $user, Tenant $tenant, array $permissionCodes): void
+function aucGrant(User $user, Tenant $tenant, array $permissionCodes, bool $isOwner = false): void
 {
-    TenantUser::query()->create([
+    TenantUser::query()->updateOrCreate([
         'tenant_id' => $tenant->id,
         'user_id' => $user->id,
+    ], [
         'status' => 'active',
+        'is_owner' => $isOwner,
         'permission_version' => 1,
     ]);
 
-    $role = Role::factory()->create([
+    $role = Role::query()->firstOrCreate([
         'tenant_id' => $tenant->id,
         'code' => 'operator',
+    ], [
+        'name' => 'Operator',
+        'status' => 'active',
     ]);
 
     $permissions = collect($permissionCodes)->map(fn (string $code) => Permission::factory()->create([

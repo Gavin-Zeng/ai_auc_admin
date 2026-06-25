@@ -64,6 +64,9 @@ class AppServiceProvider extends ServiceProvider
                 return app(AucAuthorization::class)->userCan($user, $permission);
             });
         }
+
+        Gate::define('tenants.manage', fn (User $user): bool => $user->isPlatformAdmin());
+        Gate::define('diagnostics.view', fn (User $user): bool => $user->isPlatformAdmin());
     }
 
     /**

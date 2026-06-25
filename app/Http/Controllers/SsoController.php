@@ -184,6 +184,7 @@ class SsoController extends Controller
             'roles' => $identity['roles'],
             'permissions' => $identity['permissions'],
             'permission_version' => $identity['permission_version'],
+            'menus' => $authorization->menusForApplication($code->user, $code->tenant, $application),
             'session_expires_at' => now()->addMinutes((int) config('session.lifetime'))->toISOString(),
         ]);
     }

@@ -35,7 +35,7 @@ withDefaults(
                         AUC 后台
                     </h1>
                     <p class="max-w-2xl text-base text-muted-foreground">
-                        面向内部业务系统的统一登录中心和权限中心。登录后可按租户查看可访问应用，并通过
+                        面向内部业务系统的统一登录中心和权限中心。登录后可按公司查看可访问应用，并通过
                         SSO 免登录进入各业务后台。
                     </p>
                 </div>

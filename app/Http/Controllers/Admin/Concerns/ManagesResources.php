@@ -6,6 +6,7 @@ use App\Support\AuditLogger;
 use App\Support\PermissionVersion;
 use App\Support\TenantContext;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Collection as EloquentCollection;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -31,9 +32,13 @@ trait ManagesResources
             });
         }
 
+        $items = $query->latest('id')->paginate(10)->withQueryString();
+
+        $this->transformItems($items->getCollection(), $request);
+
         return Inertia::render('admin/ResourceIndex', [
             'resource' => $this->resourceConfig($request),
-            'items' => $query->latest('id')->paginate(10)->withQueryString(),
+            'items' => $items,
             'filters' => ['search' => $search],
             'options' => $this->resourceOptions($request),
         ]);
@@ -76,11 +81,7 @@ trait ManagesResources
         $model = $this->routeModel($request);
         $this->authorizeResourceModel($model, $tenant);
 
-        if (array_key_exists('status', $model->getAttributes())) {
-            $model->forceFill(['status' => 'disabled'])->save();
-        } else {
-            $model->delete();
-        }
+        $this->disableResourceModel($request, $model, $tenant);
 
         $this->afterWrite($request, $model, $tenant, $permissionVersion);
         $auditLogger->log($request, $this->auditAction('disabled'), $model, $tenant);
@@ -119,6 +120,11 @@ trait ManagesResources
         return $this->resourceModel()::query();
     }
 
+    protected function transformItems(EloquentCollection $items, Request $request): void
+    {
+        //
+    }
+
     /**
      * @return array<string, mixed>
      */
@@ -148,6 +154,15 @@ trait ManagesResources
     {
         if (array_key_exists('tenant_id', $model->getAttributes())) {
             abort_unless((int) $model->tenant_id === (int) $tenant->id, 403);
+        }
+    }
+
+    protected function disableResourceModel(Request $request, Model $model, mixed $tenant): void
+    {
+        if (array_key_exists('status', $model->getAttributes())) {
+            $model->forceFill(['status' => 'disabled'])->save();
+        } else {
+            $model->delete();
         }
     }
 

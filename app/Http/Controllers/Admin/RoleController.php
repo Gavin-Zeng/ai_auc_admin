@@ -9,6 +9,7 @@ use App\Models\Role;
 use App\Support\PermissionVersion;
 use App\Support\TenantContext;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Collection as EloquentCollection;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Http\Request;
 
@@ -25,7 +26,9 @@ class RoleController extends Controller
     {
         $tenant = app(TenantContext::class)->current() ?? app(TenantContext::class)->resolveForRequest($request);
 
-        return Role::query()->where('tenant_id', $tenant?->id)->with('permissions');
+        return Role::query()
+            ->where('tenant_id', $tenant?->id)
+            ->with(['permissions', 'tenant:id,name']);
     }
 
     protected function resourceConfig(Request $request): array
@@ -33,7 +36,7 @@ class RoleController extends Controller
         return [
             'name' => 'roles',
             'label' => '角色管理',
-            'description' => '按当前租户维护角色，并绑定可授予的权限集合。',
+            'description' => '按当前公司维护角色，并绑定可授予的权限集合。',
             'createLabel' => '新增角色',
             'storeUrl' => route('roles.store'),
             'fields' => [
@@ -42,8 +45,15 @@ class RoleController extends Controller
                 ['name' => 'status', 'label' => '状态', 'type' => 'select', 'options' => ['active', 'disabled']],
                 ['name' => 'permission_ids', 'label' => '权限', 'type' => 'multiselect'],
             ],
-            'columns' => ['code', 'name', 'status', 'is_system'],
+            'columns' => ['company_name', 'code', 'name', 'status', 'is_system'],
         ];
+    }
+
+    protected function transformItems(EloquentCollection $items, Request $request): void
+    {
+        $items->each(function (Role $role): void {
+            $role->setAttribute('company_name', $role->tenant?->name ?? '-');
+        });
     }
 
     protected function resourceOptions(Request $request): array

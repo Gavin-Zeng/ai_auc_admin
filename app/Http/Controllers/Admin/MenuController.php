@@ -10,6 +10,7 @@ use App\Models\Permission;
 use App\Support\PermissionVersion;
 use App\Support\TenantContext;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Collection as EloquentCollection;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Http\Request;
 
@@ -34,7 +35,7 @@ class MenuController extends Controller
         return [
             'name' => 'menus',
             'label' => '菜单管理',
-            'description' => '维护当前租户菜单树、排序、显隐和权限绑定。',
+            'description' => '维护当前公司菜单树、排序、显隐和权限绑定。',
             'createLabel' => '新增菜单',
             'storeUrl' => route('menus.store'),
             'fields' => [
@@ -43,14 +44,21 @@ class MenuController extends Controller
                 ['name' => 'href', 'label' => '链接', 'type' => 'text'],
                 ['name' => 'icon', 'label' => '图标', 'type' => 'text'],
                 ['name' => 'parent_id', 'label' => '父级菜单', 'type' => 'select'],
-                ['name' => 'application_id', 'label' => '所属应用', 'type' => 'select'],
+                ['name' => 'application_id', 'label' => '所属系统', 'type' => 'select'],
                 ['name' => 'required_permissions', 'label' => '所需权限', 'type' => 'multiselect'],
                 ['name' => 'sort_order', 'label' => '排序', 'type' => 'number'],
                 ['name' => 'is_visible', 'label' => '是否显示', 'type' => 'checkbox'],
                 ['name' => 'status', 'label' => '状态', 'type' => 'select', 'options' => ['active', 'disabled']],
             ],
-            'columns' => ['code', 'title', 'href', 'sort_order', 'is_visible', 'status'],
+            'columns' => ['code', 'title', 'system_name', 'href', 'sort_order', 'is_visible', 'status'],
         ];
+    }
+
+    protected function transformItems(EloquentCollection $items, Request $request): void
+    {
+        $items->each(function (Menu $menu): void {
+            $menu->setAttribute('system_name', $menu->application?->name ?? '-');
+        });
     }
 
     protected function resourceOptions(Request $request): array
@@ -83,10 +91,25 @@ class MenuController extends Controller
 
     protected function prepareData(Request $request, array $data, ?Model $model = null): array
     {
-        $data['tenant_id'] = app(TenantContext::class)->current()?->id;
+        $tenant = app(TenantContext::class)->current();
+        $data['tenant_id'] = $tenant?->id;
         $data['required_permissions'] ??= [];
         $data['is_visible'] = $request->boolean('is_visible');
         $data['sort_order'] ??= 0;
+
+        if (($data['parent_id'] ?? null) !== null) {
+            abort_unless(Menu::query()
+                ->where('tenant_id', $tenant?->id)
+                ->whereKey($data['parent_id'])
+                ->exists(), 403);
+        }
+
+        if (($data['application_id'] ?? null) !== null) {
+            abort_unless(Application::query()
+                ->where('tenant_id', $tenant?->id)
+                ->whereKey($data['application_id'])
+                ->exists(), 403);
+        }
 
         return $data;
     }

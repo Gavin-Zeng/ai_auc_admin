@@ -2,6 +2,7 @@
 
 use App\Models\Application;
 use App\Models\AuditLog;
+use App\Models\Menu;
 use App\Models\SsoAuthCode;
 use App\Models\Tenant;
 use App\Models\User;
@@ -86,6 +87,13 @@ test('authorization code can only be exchanged once', function () {
         'required_permissions' => ['dashboard.view'],
     ]);
 
+    Menu::factory()->create([
+        'tenant_id' => $tenant->id,
+        'application_id' => $application->id,
+        'title' => 'Client Dashboard',
+        'required_permissions' => ['dashboard.view'],
+    ]);
+
     $code = SsoAuthCode::query()->create([
         'tenant_id' => $tenant->id,
         'user_id' => $user->id,
@@ -106,7 +114,8 @@ test('authorization code can only be exchanged once', function () {
         ->assertOk()
         ->assertJsonPath('user.id', $user->id)
         ->assertJsonPath('tenant.id', $tenant->id)
-        ->assertJsonPath('permissions.0', 'dashboard.view');
+        ->assertJsonPath('permissions.0', 'dashboard.view')
+        ->assertJsonPath('menus.0.title', 'Client Dashboard');
 
     $this->postJson(route('sso.token'), $payload)
         ->assertUnprocessable();

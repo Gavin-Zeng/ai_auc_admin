@@ -21,13 +21,13 @@ class TenantController extends Controller
     {
         return [
             'name' => 'tenants',
-            'label' => '租户管理',
-            'description' => '维护平台租户基础信息和启停状态。',
-            'createLabel' => '新增租户',
+            'label' => '公司管理',
+            'description' => '维护平台公司基础信息和启停状态，仅平台超管可操作。',
+            'createLabel' => '新增公司',
             'storeUrl' => route('tenants.store'),
             'fields' => [
                 ['name' => 'code', 'label' => '编码', 'type' => 'text', 'required' => true],
-                ['name' => 'name', 'label' => '名称', 'type' => 'text', 'required' => true],
+                ['name' => 'name', 'label' => '公司名称', 'type' => 'text', 'required' => true],
                 ['name' => 'domain', 'label' => '域名', 'type' => 'text'],
                 ['name' => 'status', 'label' => '状态', 'type' => 'select', 'options' => ['active', 'disabled']],
             ],

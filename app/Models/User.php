@@ -71,6 +71,16 @@ class User extends Authenticatable
         return (bool) $this->is_platform_admin;
     }
 
+    public function isCompanyOwner(Tenant $tenant): bool
+    {
+        return TenantUser::query()
+            ->where('tenant_id', $tenant->id)
+            ->where('user_id', $this->id)
+            ->where('status', 'active')
+            ->where('is_owner', true)
+            ->exists();
+    }
+
     /**
      * Get the attributes that should be cast.
      *

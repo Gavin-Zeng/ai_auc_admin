@@ -59,9 +59,9 @@ class AucDiagnostics
             ->first();
 
         $checks = collect([
-            $this->check('tenant.default', '默认租户 default 存在', $tenant !== null),
-            $this->check('tenant.active', '默认租户处于启用状态', $tenant?->isActive() === true, $tenant?->status),
-            $this->check('admin.user', '存在平台管理员或默认租户管理员', $this->hasAdministrator($tenant)),
+            $this->check('tenant.default', '默认公司 default 存在', $tenant !== null),
+            $this->check('tenant.active', '默认公司处于启用状态', $tenant?->isActive() === true, $tenant?->status),
+            $this->check('admin.user', '存在平台管理员或默认公司管理员', $this->hasAdministrator($tenant)),
             $this->check('role.admin', '默认 admin 角色存在', $adminRole !== null),
             $this->check('application.auc-admin', '默认应用 auc-admin 存在', $application !== null),
             $this->check('application.active', '默认应用处于启用状态', $application?->isActive() === true, $application?->status),
@@ -73,7 +73,7 @@ class AucDiagnostics
                 $application?->redirect_uri,
             ),
             $this->check('application.base_url', '默认应用基础地址已配置', filled($application?->base_url), $application?->base_url),
-            $this->check('permission.version', '默认租户成员权限版本有效', $this->hasPermissionVersion($tenant)),
+            $this->check('permission.version', '默认公司成员权限版本有效', $this->hasPermissionVersion($tenant)),
         ]);
 
         $checks = $checks
@@ -116,7 +116,7 @@ class AucDiagnostics
         return collect(self::RequiredMenus)
             ->map(fn (string $menu): array => $this->check(
                 "menu.{$menu}",
-                "默认租户菜单 {$menu} 存在",
+                "默认公司菜单 {$menu} 存在",
                 in_array($menu, $menuCodes, true),
             ));
     }

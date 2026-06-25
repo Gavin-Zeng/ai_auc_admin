@@ -42,13 +42,13 @@ class DatabaseSeeder extends Seeder
 
         $permissionCodes = [
             'dashboard.view' => '查看工作台',
-            'tenants.manage' => '管理租户',
-            'applications.manage' => '管理应用',
+            'tenants.manage' => '管理公司',
+            'applications.manage' => '管理系统',
             'users.manage' => '管理用户',
             'roles.manage' => '管理角色',
             'permissions.manage' => '管理权限',
             'menus.manage' => '管理菜单',
-            'audit_logs.view' => '查看审计日志',
+            'audit_logs.view' => '查看操作日志',
             'diagnostics.view' => '查看运维诊断',
         ];
 
@@ -101,13 +101,13 @@ class DatabaseSeeder extends Seeder
     {
         return [
             ['tenant_id' => $tenantId, 'code' => 'dashboard', 'title' => '仪表盘', 'href' => '/dashboard', 'icon' => 'dashboard', 'required_permissions' => ['dashboard.view'], 'sort_order' => 10, 'is_visible' => true, 'status' => 'active'],
-            ['tenant_id' => $tenantId, 'code' => 'tenants', 'title' => '租户管理', 'href' => '/tenants', 'icon' => 'tenants', 'required_permissions' => ['tenants.manage'], 'sort_order' => 20, 'is_visible' => true, 'status' => 'active'],
-            ['tenant_id' => $tenantId, 'code' => 'users', 'title' => '用户管理', 'href' => '/users', 'icon' => 'users', 'required_permissions' => ['users.manage'], 'sort_order' => 30, 'is_visible' => true, 'status' => 'active'],
+            ['tenant_id' => $tenantId, 'code' => 'tenants', 'title' => '公司管理', 'href' => '/tenants', 'icon' => 'tenants', 'required_permissions' => ['tenants.manage'], 'sort_order' => 20, 'is_visible' => true, 'status' => 'active'],
+            ['tenant_id' => $tenantId, 'code' => 'users', 'title' => '公司成员', 'href' => '/users', 'icon' => 'users', 'required_permissions' => ['users.manage'], 'sort_order' => 30, 'is_visible' => true, 'status' => 'active'],
             ['tenant_id' => $tenantId, 'code' => 'roles', 'title' => '角色管理', 'href' => '/roles', 'icon' => 'roles', 'required_permissions' => ['roles.manage'], 'sort_order' => 40, 'is_visible' => true, 'status' => 'active'],
             ['tenant_id' => $tenantId, 'code' => 'permissions', 'title' => '权限管理', 'href' => '/permissions', 'icon' => 'permissions', 'required_permissions' => ['permissions.manage'], 'sort_order' => 50, 'is_visible' => true, 'status' => 'active'],
             ['tenant_id' => $tenantId, 'code' => 'menus', 'title' => '菜单管理', 'href' => '/menus', 'icon' => 'menus', 'required_permissions' => ['menus.manage'], 'sort_order' => 60, 'is_visible' => true, 'status' => 'active'],
-            ['tenant_id' => $tenantId, 'code' => 'applications', 'title' => '应用管理', 'href' => '/applications', 'icon' => 'applications', 'required_permissions' => ['applications.manage'], 'sort_order' => 70, 'is_visible' => true, 'status' => 'active'],
-            ['tenant_id' => $tenantId, 'code' => 'audit_logs', 'title' => '审计日志', 'href' => '/audit-logs', 'icon' => 'audit_logs', 'required_permissions' => ['audit_logs.view'], 'sort_order' => 80, 'is_visible' => true, 'status' => 'active'],
+            ['tenant_id' => $tenantId, 'code' => 'applications', 'title' => '系统管理', 'href' => '/applications', 'icon' => 'applications', 'required_permissions' => ['applications.manage'], 'sort_order' => 70, 'is_visible' => true, 'status' => 'active'],
+            ['tenant_id' => $tenantId, 'code' => 'audit_logs', 'title' => '操作日志', 'href' => '/audit-logs', 'icon' => 'audit_logs', 'required_permissions' => ['audit_logs.view'], 'sort_order' => 80, 'is_visible' => true, 'status' => 'active'],
             ['tenant_id' => $tenantId, 'code' => 'diagnostics', 'title' => '运维诊断', 'href' => '/diagnostics', 'icon' => 'diagnostics', 'required_permissions' => ['diagnostics.view'], 'sort_order' => 90, 'is_visible' => true, 'status' => 'active'],
         ];
     }

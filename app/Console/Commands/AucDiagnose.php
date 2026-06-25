@@ -8,7 +8,7 @@ use Illuminate\Console\Attributes\Signature;
 use Illuminate\Console\Command;
 
 #[Signature('auc:diagnose')]
-#[Description('检查 AUC 默认租户、权限、菜单、角色和应用配置是否完整')]
+#[Description('检查 AUC 默认公司、权限、菜单、角色和应用配置是否完整')]
 class AucDiagnose extends Command
 {
     /**

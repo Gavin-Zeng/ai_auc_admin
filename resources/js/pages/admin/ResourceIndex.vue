@@ -1,7 +1,8 @@
 <script setup lang="ts">
-import { Head, router, useForm, usePage } from '@inertiajs/vue3';
-import { KeyRound, Pencil, Plus, Search, ShieldOff } from 'lucide-vue-next';
-import { computed, ref } from 'vue';
+import { Head, Link, router, useForm, usePage } from '@inertiajs/vue3';
+import { Eye, KeyRound, Pencil, Plus, Search } from 'lucide-vue-next';
+import { computed, ref, watch } from 'vue';
+import { show as showApplication } from '@/routes/applications';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -15,7 +16,9 @@ import {
     SelectValue,
 } from '@/components/ui/select';
 
-type FieldOption = string | { value: number | string; label: string };
+type FieldOption =
+    | string
+    | { value: number | string; label: string; tenant_id?: number | string | null };
 
 type FieldConfig = {
     name: string;
@@ -24,6 +27,10 @@ type FieldConfig = {
     type: 'text' | 'number' | 'select' | 'textarea' | 'checkbox' | 'multiselect';
     required?: boolean;
     options?: FieldOption[];
+    default?: unknown;
+    createOnly?: boolean;
+    span?: 1 | 2;
+    group?: string;
 };
 
 type ResourceConfig = {
@@ -32,6 +39,7 @@ type ResourceConfig = {
     description?: string;
     createLabel?: string;
     storeUrl?: string;
+    currentTenantId?: number | string | null;
     readOnly?: boolean;
     fields: FieldConfig[];
     columns: string[];
@@ -55,12 +63,22 @@ const showForm = ref(false);
 const search = ref(props.filters.search ?? '');
 const page = usePage();
 const rotatedSecret = computed(() => page.props.secret as string | undefined);
+const visibleFields = computed(() =>
+    props.resource.fields.filter((field) => !editing.value || !field.createOnly),
+);
+const formPanelClass = computed(() =>
+    props.resource.name === 'users'
+        ? 'max-w-3xl'
+        : 'max-w-none',
+);
 
 const blankValues = computed(() =>
     Object.fromEntries(
         props.resource.fields.map((field) => [
             field.name,
-            field.type === 'checkbox'
+            field.default !== undefined && field.default !== null
+                ? String(field.default)
+                : field.type === 'checkbox'
                 ? false
                 : field.type === 'multiselect'
                   ? []
@@ -74,27 +92,36 @@ const form = useForm<Record<string, any>>({ ...blankValues.value });
 const displayLabels: Record<string, string> = {
     action: '操作',
     account: '账号',
-    application_id: '所属应用',
+    application_id: '所属系统',
     base_url: '基础地址',
     client_id: '客户端 ID',
     code: '编码',
+    company_name: '所属公司',
+    company_names: '所属公司',
     created_at: '创建时间',
     description: '描述',
     domain: '域名',
     email: '邮箱',
     group: '分组',
     href: '链接',
+    is_owner: '公司超管',
     ip_address: 'IP 地址',
     is_platform_admin: '平台超管',
     is_system: '系统内置',
     is_visible: '是否显示',
     name: '名称',
+    operated_at: '操作时间',
+    operation_action: '操作动作',
+    operation_object: '操作对象',
+    operator_name: '操作人',
     parent_id: '父级菜单',
     redirect_uri: '回调地址',
+    request_params: '请求参数',
     sort_order: '排序',
     status: '状态',
     subject_id: '对象 ID',
     subject_type: '对象类型',
+    system_name: '所属系统',
     title: '标题',
 };
 
@@ -116,7 +143,29 @@ function optionLabel(option: FieldOption): string {
 }
 
 function fieldOptions(field: FieldConfig): FieldOption[] {
+    if (
+        props.resource.name === 'users' &&
+        field.name === 'role_ids' &&
+        form.tenant_id
+    ) {
+        return (props.options[field.name] ?? []).filter((option) => {
+            if (typeof option === 'string') {
+                return true;
+            }
+
+            return String(option.tenant_id ?? '') === String(form.tenant_id);
+        });
+    }
+
     return field.options ?? props.options[field.name] ?? [];
+}
+
+function requestPayload(): Record<string, any> {
+    const fieldNames = new Set(visibleFields.value.map((field) => field.name));
+
+    return Object.fromEntries(
+        Object.entries(form.data()).filter(([key]) => fieldNames.has(key)),
+    );
 }
 
 function startCreate() {
@@ -132,7 +181,10 @@ function startEdit(item: Record<string, any>) {
     const values = { ...blankValues.value };
 
     for (const field of props.resource.fields) {
-        values[field.name] = item[field.name] ?? values[field.name];
+        const value = item[field.name] ?? values[field.name];
+        values[field.name] = field.type === 'select' && value !== ''
+            ? String(value)
+            : value;
     }
 
     form.defaults(values);
@@ -141,11 +193,29 @@ function startEdit(item: Record<string, any>) {
     showForm.value = true;
 }
 
+function statusPayload(item: Record<string, any>, status: string): Record<string, any> {
+    const fieldNames = new Set(props.resource.fields.map((field) => field.name));
+    const payload = Object.fromEntries(
+        Object.entries(item).filter(([key]) => fieldNames.has(key)),
+    );
+
+    payload.status = status;
+
+    if (props.resource.name === 'users') {
+        payload.password = '';
+    }
+
+    return payload;
+}
+
 function submit() {
+    form.transform(() => requestPayload());
+
     if (editing.value) {
         form.put(`/${props.resource.name}/${editing.value.id}`, {
             preserveScroll: true,
             onSuccess: () => (showForm.value = false),
+            onFinish: () => form.transform((data) => data),
         });
 
         return;
@@ -154,11 +224,28 @@ function submit() {
     form.post(props.resource.storeUrl ?? `/${props.resource.name}`, {
         preserveScroll: true,
         onSuccess: () => (showForm.value = false),
+        onFinish: () => form.transform((data) => data),
     });
 }
 
-function disable(item: Record<string, any>) {
-    router.delete(`/${props.resource.name}/${item.id}`, {
+function toggleStatus(item: Record<string, any>) {
+    if (props.resource.readOnly) {
+        return;
+    }
+
+    const currentStatus = String(item.status ?? '');
+    const nextStatus = currentStatus === 'active' ? 'disabled' : 'active';
+    const confirmed = confirm(
+        currentStatus === 'active'
+            ? '确定停用该记录吗？'
+            : '确定启用该记录吗？',
+    );
+
+    if (!confirmed) {
+        return;
+    }
+
+    router.put(`/${props.resource.name}/${item.id}`, statusPayload(item, nextStatus), {
         preserveScroll: true,
     });
 }
@@ -193,8 +280,49 @@ function toggleMulti(field: FieldConfig, value: string) {
     form[field.name] = [...current];
 }
 
+function fieldClass(field: FieldConfig): string {
+    return field.span === 2 ? 'space-y-2 md:col-span-2' : 'space-y-2';
+}
+
+function statusBadgeClass(item: Record<string, any>, column: string): string {
+    const value = String(item[column] ?? '');
+
+    if (value === 'active') {
+        return 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900/60 dark:bg-emerald-950/40 dark:text-emerald-300';
+    }
+
+    if (value === 'disabled') {
+        return 'border-rose-200 bg-rose-50 text-rose-700 dark:border-rose-900/60 dark:bg-rose-950/40 dark:text-rose-300';
+    }
+
+    return '';
+}
+
+function statusButtonClass(item: Record<string, any>, column: string): string {
+    return `${statusBadgeClass(item, column)} h-7 rounded-full px-3 text-xs font-medium shadow-none transition hover:brightness-95`;
+}
+
+function shouldShowActions(): boolean {
+    return !props.resource.readOnly || props.resource.name === 'applications';
+}
+
 function displayValue(item: Record<string, any>, column: string): string {
     const value = item[column];
+    const field = props.resource.fields.find((field) => field.name === column);
+
+    if (['is_owner', 'is_platform_admin', 'is_system', 'is_visible'].includes(column)) {
+        return Boolean(value) ? '是' : '否';
+    }
+
+    if (field?.type === 'select') {
+        const option = fieldOptions(field).find(
+            (option) => optionValue(option) === String(value),
+        );
+
+        if (option) {
+            return optionLabel(option);
+        }
+    }
 
     if (typeof value === 'boolean') {
         return value ? '是' : '否';
@@ -210,6 +338,23 @@ function displayValue(item: Record<string, any>, column: string): string {
 
     return value ?? '';
 }
+
+watch(
+    () => form.tenant_id,
+    () => {
+        if (props.resource.name !== 'users') {
+            return;
+        }
+
+        const allowedRoleIds = new Set(
+            fieldOptions({ name: 'role_ids', label: '角色', type: 'multiselect' }).map(optionValue),
+        );
+
+        form.role_ids = (form.role_ids ?? [])
+            .map(String)
+            .filter((roleId: string) => allowedRoleIds.has(roleId));
+    },
+);
 </script>
 
 <template>
@@ -238,7 +383,7 @@ function displayValue(item: Record<string, any>, column: string): string {
             v-if="rotatedSecret"
             class="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900 dark:border-amber-900/60 dark:bg-amber-950/40 dark:text-amber-100"
         >
-            <div class="font-medium">新的应用密钥只显示一次</div>
+            <div class="font-medium">新的系统密钥只显示一次</div>
             <div class="mt-2 break-all font-mono">{{ rotatedSecret }}</div>
         </div>
 
@@ -266,35 +411,43 @@ function displayValue(item: Record<string, any>, column: string): string {
 
         <form
             v-if="showForm && !resource.readOnly"
-            class="grid gap-4 rounded-lg border border-sidebar-border/70 p-4 md:grid-cols-2 dark:border-sidebar-border"
+            :class="[
+                'grid gap-3 rounded-lg border border-sidebar-border/70 bg-card/40 p-4 md:grid-cols-2 dark:border-sidebar-border',
+                formPanelClass,
+            ]"
             @submit.prevent="submit"
         >
             <div
-                v-for="field in resource.fields"
+                v-for="field in visibleFields"
                 :key="field.name"
-                class="space-y-2"
+                :class="fieldClass(field)"
             >
-                <Label :for="field.name">{{ field.label }}</Label>
+                <Label :for="field.name" class="text-xs">{{ field.label }}</Label>
 
                 <textarea
                     v-if="field.type === 'textarea'"
                     :id="field.name"
                     v-model="form[field.name]"
-                    class="border-input min-h-24 w-full rounded-md border bg-transparent px-3 py-2 text-sm"
+                    class="border-input min-h-20 w-full rounded-md border bg-transparent px-3 py-2 text-sm"
                 />
 
-                <Checkbox
+                <div
                     v-else-if="field.type === 'checkbox'"
-                    :id="field.name"
-                    :model-value="Boolean(form[field.name])"
-                    @update:model-value="form[field.name] = $event"
-                />
+                    class="flex h-9 items-center gap-2"
+                >
+                    <Checkbox
+                        :id="field.name"
+                        :model-value="Boolean(form[field.name])"
+                        @update:model-value="form[field.name] = $event"
+                    />
+                    <span class="text-sm text-muted-foreground">是</span>
+                </div>
 
                 <Select
                     v-else-if="field.type === 'select'"
                     v-model="form[field.name]"
                 >
-                    <SelectTrigger>
+                    <SelectTrigger class="w-full">
                         <SelectValue :placeholder="field.label" />
                     </SelectTrigger>
                     <SelectContent>
@@ -310,7 +463,7 @@ function displayValue(item: Record<string, any>, column: string): string {
 
                 <div
                     v-else-if="field.type === 'multiselect'"
-                    class="max-h-36 space-y-2 overflow-y-auto rounded-md border border-sidebar-border/70 p-3"
+                    class="max-h-32 min-h-20 space-y-2 overflow-y-auto rounded-md border border-sidebar-border/70 bg-background/60 p-3"
                 >
                     <label
                         v-for="option in fieldOptions(field)"
@@ -329,6 +482,12 @@ function displayValue(item: Record<string, any>, column: string): string {
                         />
                         <span>{{ optionLabel(option) }}</span>
                     </label>
+                    <div
+                        v-if="fieldOptions(field).length === 0"
+                        class="text-sm text-muted-foreground"
+                    >
+                        暂无可选角色。
+                    </div>
                 </div>
 
                 <Input
@@ -343,7 +502,7 @@ function displayValue(item: Record<string, any>, column: string): string {
                 </div>
             </div>
 
-            <div class="flex gap-2 md:col-span-2">
+            <div class="flex gap-2 border-t border-sidebar-border/70 pt-3 md:col-span-2">
                 <Button type="submit" :disabled="form.processing">
                     {{ editing ? '更新' : '创建' }}
                 </Button>
@@ -368,7 +527,12 @@ function displayValue(item: Record<string, any>, column: string): string {
                         >
                             {{ columnLabel(column) }}
                         </th>
-                        <th class="w-44 px-3 py-2 font-medium">操作</th>
+                        <th
+                            v-if="shouldShowActions()"
+                            class="w-32 px-3 py-2 font-medium"
+                        >
+                            操作
+                        </th>
                     </tr>
                 </thead>
                 <tbody>
@@ -382,13 +546,36 @@ function displayValue(item: Record<string, any>, column: string): string {
                             :key="column"
                             class="px-3 py-2"
                         >
-                            <Badge v-if="column === 'status'" variant="secondary">
+                            <Button
+                                v-if="column === 'status' && !resource.readOnly"
+                                type="button"
+                                variant="outline"
+                                :class="statusButtonClass(item, column)"
+                                @click="toggleStatus(item)"
+                            >
+                                {{ displayValue(item, column) }}
+                            </Button>
+                            <Badge
+                                v-else-if="column === 'status'"
+                                variant="outline"
+                                :class="statusBadgeClass(item, column)"
+                            >
                                 {{ displayValue(item, column) }}
                             </Badge>
                             <span v-else>{{ displayValue(item, column) }}</span>
                         </td>
-                        <td class="px-3 py-2">
+                        <td v-if="shouldShowActions()" class="px-3 py-2">
                             <div class="flex gap-1">
+                                <Button
+                                    v-if="resource.name === 'applications'"
+                                    size="icon"
+                                    variant="ghost"
+                                    as-child
+                                >
+                                    <Link :href="showApplication(item.id).url">
+                                        <Eye class="size-4" />
+                                    </Link>
+                                </Button>
                                 <Button
                                     v-if="!resource.readOnly"
                                     size="icon"
@@ -409,20 +596,12 @@ function displayValue(item: Record<string, any>, column: string): string {
                                 >
                                     <KeyRound class="size-4" />
                                 </Button>
-                                <Button
-                                    v-if="!resource.readOnly"
-                                    size="icon"
-                                    variant="ghost"
-                                    @click="disable(item)"
-                                >
-                                    <ShieldOff class="size-4" />
-                                </Button>
                             </div>
                         </td>
                     </tr>
                     <tr v-if="items.data.length === 0">
                         <td
-                            :colspan="resource.columns.length + 1"
+                            :colspan="resource.columns.length + (shouldShowActions() ? 1 : 0)"
                             class="px-3 py-8 text-center text-muted-foreground"
                         >
                             暂无数据。

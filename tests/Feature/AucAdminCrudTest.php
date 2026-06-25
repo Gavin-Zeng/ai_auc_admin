@@ -8,6 +8,8 @@ use App\Models\Role;
 use App\Models\Tenant;
 use App\Models\TenantUser;
 use App\Models\User;
+use App\Support\AuditLogger;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 
 test('platform admin can create and disable a tenant', function () {
@@ -27,6 +29,225 @@ test('platform admin can create and disable a tenant', function () {
 
     $this->delete(route('tenants.destroy', $tenant))->assertRedirect();
     expect($tenant->refresh()->status)->toBe('disabled');
+});
+
+test('company admin cannot promote members to company owner', function () {
+    $tenant = Tenant::factory()->create();
+    $admin = User::factory()->create();
+    $member = User::factory()->create();
+    aucGrant($admin, $tenant, ['users.manage']);
+    aucGrant($member, $tenant, []);
+
+    $this->actingAs($admin)
+        ->put(route('users.update', $member), [
+            'account' => $member->account,
+            'name' => $member->name,
+            'email' => $member->email,
+            'status' => 'active',
+            'is_owner' => true,
+            'role_ids' => [],
+        ])
+        ->assertForbidden();
+});
+
+test('company admin cannot disable a company owner membership', function () {
+    $tenant = Tenant::factory()->create();
+    $admin = User::factory()->create();
+    $owner = User::factory()->create();
+    aucGrant($admin, $tenant, ['users.manage']);
+    aucGrant($owner, $tenant, [], isOwner: true);
+
+    $this->actingAs($admin)
+        ->delete(route('users.destroy', $owner))
+        ->assertForbidden();
+});
+
+test('platform admin can disable a company owner membership', function () {
+    $tenant = Tenant::factory()->create();
+    $admin = User::factory()->platformAdmin()->create();
+    $owner = User::factory()->create();
+    aucGrant($owner, $tenant, [], isOwner: true);
+
+    $this->actingAs($admin)
+        ->delete(route('users.destroy', $owner))
+        ->assertRedirect();
+
+    expect(TenantUser::query()
+        ->where('tenant_id', $tenant->id)
+        ->where('user_id', $owner->id)
+        ->value('status'))->toBe('disabled');
+});
+
+test('company member list shows roles company admin flag and status before actions', function () {
+    $tenant = Tenant::factory()->create();
+    $admin = User::factory()->create();
+    $member = User::factory()->create();
+    aucGrant($admin, $tenant, ['users.manage'], isOwner: true);
+    aucGrant($member, $tenant, [], isOwner: true);
+
+    $role = Role::query()
+        ->where('tenant_id', $tenant->id)
+        ->where('code', 'operator')
+        ->firstOrFail();
+
+    $this->actingAs($admin)
+        ->get(route('users.index'))
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page
+            ->where('resource.createLabel', '新增账号')
+            ->where('resource.columns', ['account', 'name', 'email', 'company_names', 'role_names', 'is_owner', 'is_platform_admin', 'status'])
+            ->where('resource.fields.5.label', '公司超管')
+            ->missing('resource.fields.tenant_id')
+            ->where('items.data.0.company_names.0', $tenant->name)
+            ->where('items.data.0.role_names.0', "{$role->code} - {$role->name}")
+            ->where('items.data.0.is_owner', 1)
+            ->where('items.data.0.status', 'active'));
+});
+
+test('platform admin user form exposes company selector and company scoped role options', function () {
+    $tenant = Tenant::factory()->create(['name' => 'A 公司', 'status' => 'disabled']);
+    $otherTenant = Tenant::factory()->create(['name' => 'B 公司', 'status' => 'active']);
+    $admin = User::factory()->platformAdmin()->create();
+    Role::factory()->create([
+        'tenant_id' => $tenant->id,
+        'code' => 'alpha',
+        'name' => 'Alpha',
+    ]);
+    Role::factory()->create([
+        'tenant_id' => $otherTenant->id,
+        'code' => 'beta',
+        'name' => 'Beta',
+    ]);
+
+    $this->actingAs($admin)
+        ->get(route('users.index', ['tenant_id' => $tenant->id]))
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page
+            ->where('resource.createLabel', '新增账号')
+            ->where('resource.fields.4.name', 'tenant_id')
+            ->where('resource.fields.4.label', '所属公司')
+            ->where('resource.fields.4.createOnly', true)
+            ->missing('resource.fields.4.default')
+            ->where('resource.fields.4.group', '公司与状态')
+            ->where('resource.fields.7.group', '角色授权')
+            ->where('options.tenant_id.0.value', (string) $tenant->id)
+            ->where('options.tenant_id.0.label', 'A 公司（已停用）')
+            ->where('options.tenant_id.1.label', 'B 公司')
+            ->where('options.role_ids.0.tenant_id', (string) $tenant->id)
+            ->where('options.role_ids.1.tenant_id', (string) $otherTenant->id));
+});
+
+test('platform admin can create account for selected company with active membership by default', function () {
+    $tenant = Tenant::factory()->create();
+    $otherTenant = Tenant::factory()->create();
+    $admin = User::factory()->platformAdmin()->create();
+    $role = Role::factory()->create(['tenant_id' => $otherTenant->id]);
+
+    $this->actingAs($admin)
+        ->post(route('users.store', ['tenant_id' => $otherTenant->id]), [
+            'account' => 'NewAccount',
+            'name' => 'New Account',
+            'email' => 'new-account@example.test',
+            'password' => 'password123',
+            'tenant_id' => $otherTenant->id,
+            'is_owner' => false,
+            'role_ids' => [$role->id],
+        ])
+        ->assertRedirect();
+
+    $user = User::query()->where('account', 'NewAccount')->firstOrFail();
+
+    expect(TenantUser::query()
+        ->where('tenant_id', $otherTenant->id)
+        ->where('user_id', $user->id)
+        ->value('status'))->toBe('active');
+    expect(TenantUser::query()
+        ->where('tenant_id', $tenant->id)
+        ->where('user_id', $user->id)
+        ->exists())->toBeFalse();
+    expect($user->roles()->wherePivot('tenant_id', $otherTenant->id)->pluck('auc_roles.id')->all())->toBe([$role->id]);
+});
+
+test('company admin can toggle member status through update payload', function () {
+    $tenant = Tenant::factory()->create();
+    $admin = User::factory()->create();
+    $member = User::factory()->create();
+    aucGrant($admin, $tenant, ['users.manage'], isOwner: true);
+    aucGrant($member, $tenant, []);
+
+    $this->actingAs($admin)
+        ->put(route('users.update', $member), [
+            'account' => $member->account,
+            'name' => $member->name,
+            'email' => $member->email,
+            'password' => '',
+            'status' => 'disabled',
+            'is_owner' => false,
+            'role_ids' => [],
+        ])
+        ->assertRedirect();
+
+    expect(TenantUser::query()
+        ->where('tenant_id', $tenant->id)
+        ->where('user_id', $member->id)
+        ->value('status'))->toBe('disabled');
+
+    $this->put(route('users.update', $member), [
+        'account' => $member->account,
+        'name' => $member->name,
+        'email' => $member->email,
+        'password' => '',
+        'status' => 'active',
+        'is_owner' => false,
+        'role_ids' => [],
+    ])->assertRedirect();
+
+    expect(TenantUser::query()
+        ->where('tenant_id', $tenant->id)
+        ->where('user_id', $member->id)
+        ->value('status'))->toBe('active');
+});
+
+test('company admin cannot spoof another company when creating account', function () {
+    $tenant = Tenant::factory()->create();
+    $otherTenant = Tenant::factory()->create();
+    $admin = User::factory()->create();
+    aucGrant($admin, $tenant, ['users.manage']);
+
+    $this->actingAs($admin)
+        ->post(route('users.store'), [
+            'account' => 'Spoofed',
+            'name' => 'Spoofed User',
+            'email' => 'spoofed@example.test',
+            'password' => 'password123',
+            'tenant_id' => $otherTenant->id,
+            'is_owner' => false,
+            'role_ids' => [],
+        ])
+        ->assertForbidden();
+
+    expect(User::query()->where('account', 'Spoofed')->exists())->toBeFalse();
+});
+
+test('platform admin cannot assign role outside selected company when creating account', function () {
+    $tenant = Tenant::factory()->create();
+    $otherTenant = Tenant::factory()->create();
+    $admin = User::factory()->platformAdmin()->create();
+    $foreignRole = Role::factory()->create(['tenant_id' => $tenant->id]);
+
+    $this->actingAs($admin)
+        ->post(route('users.store', ['tenant_id' => $otherTenant->id]), [
+            'account' => 'ForeignRole',
+            'name' => 'Foreign Role',
+            'email' => 'foreign-role@example.test',
+            'password' => 'password123',
+            'tenant_id' => $otherTenant->id,
+            'is_owner' => false,
+            'role_ids' => [$foreignRole->id],
+        ])
+        ->assertSessionHasErrors('role_ids.0');
+
+    expect(User::query()->where('account', 'ForeignRole')->exists())->toBeFalse();
 });
 
 test('tenant admin can manage roles and permission version changes', function () {
@@ -56,6 +277,64 @@ test('tenant admin can manage roles and permission version changes', function ()
         ->where('tenant_id', $tenant->id)
         ->where('user_id', $admin->id)
         ->value('permission_version'))->toBeGreaterThan($before);
+});
+
+test('role management list includes company name', function () {
+    $tenant = Tenant::factory()->create(['name' => '创量科技']);
+    $admin = User::factory()->create();
+    aucGrant($admin, $tenant, ['roles.manage']);
+
+    $this->actingAs($admin)
+        ->get(route('roles.index'))
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page
+            ->where('resource.columns.0', 'company_name')
+            ->where('items.data.0.company_name', '创量科技'));
+});
+
+test('system management resource uses system wording', function () {
+    $tenant = Tenant::factory()->create();
+    $admin = User::factory()->create();
+    aucGrant($admin, $tenant, ['applications.manage']);
+
+    $this->actingAs($admin)
+        ->get(route('applications.index'))
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page
+            ->where('resource.label', '系统管理')
+            ->where('resource.createLabel', '新增系统'));
+});
+
+test('menu management list includes system name', function () {
+    $tenant = Tenant::factory()->create();
+    $admin = User::factory()->create();
+    aucGrant($admin, $tenant, ['menus.manage']);
+
+    $application = Application::factory()->create([
+        'tenant_id' => $tenant->id,
+        'name' => '投放系统',
+    ]);
+    Menu::factory()->create([
+        'tenant_id' => $tenant->id,
+        'application_id' => $application->id,
+        'code' => 'campaigns',
+        'title' => '计划管理',
+    ]);
+
+    $this->actingAs($admin)
+        ->get(route('menus.index'))
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page
+            ->where('resource.fields.5.label', '所属系统')
+            ->where('resource.columns.2', 'system_name')
+            ->where('items.data.0.system_name', '投放系统'));
+});
+
+test('default menus use system and operation log titles', function () {
+    $this->seed();
+
+    expect(Menu::query()->where('code', 'applications')->value('title'))->toBe('系统管理');
+    expect(Menu::query()->where('code', 'audit_logs')->value('title'))->toBe('操作日志');
 });
 
 test('application secret can be rotated and audited', function () {
@@ -117,6 +396,48 @@ test('application changes bump permission version and hide client secret from ad
             ->missing('items.data.0.client_secret'));
 });
 
+test('application detail groups sso config permissions menus authorization and checks', function () {
+    $tenant = Tenant::factory()->create();
+    $admin = User::factory()->create();
+    aucGrant($admin, $tenant, ['applications.manage', 'orders.view']);
+
+    $application = Application::factory()->create([
+        'tenant_id' => $tenant->id,
+        'code' => 'orders',
+        'name' => '订单系统',
+        'client_secret' => 'visible-once',
+        'required_permissions' => ['orders.view'],
+    ]);
+
+    Permission::query()
+        ->where('code', 'orders.view')
+        ->update([
+            'application_id' => $application->id,
+            'name' => '查看订单',
+        ]);
+
+    Menu::factory()->create([
+        'tenant_id' => $tenant->id,
+        'application_id' => $application->id,
+        'code' => 'orders',
+        'title' => '订单管理',
+        'required_permissions' => ['orders.view'],
+    ]);
+
+    $this->actingAs($admin)
+        ->get(route('applications.show', $application))
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page
+            ->component('admin/ApplicationShow')
+            ->where('application.code', 'orders')
+            ->where('application.secret_configured', true)
+            ->where('permissions.0.code', 'orders.view')
+            ->where('menus.0.title', '订单管理')
+            ->where('authorization.required_permissions.0', 'orders.view')
+            ->where('checks.0.passed', true)
+            ->missing('application.client_secret'));
+});
+
 test('permission snapshot exposes versioned local authorization data', function () {
     $tenant = Tenant::factory()->create();
     $user = User::factory()->create();
@@ -163,18 +484,31 @@ test('tenant admin cannot manage records in another tenant', function () {
             'required_permissions' => [],
         ])
         ->assertForbidden();
+
+    $this->get(route('applications.show', $application))->assertForbidden();
 });
 
-test('audit logs can be filtered by action', function () {
+test('operation logs show enriched fields and can be filtered by action', function () {
     $tenant = Tenant::factory()->create();
     $admin = User::factory()->create();
     aucGrant($admin, $tenant, ['audit_logs.view']);
+    $application = Application::factory()->create([
+        'tenant_id' => $tenant->id,
+        'name' => '订单系统',
+    ]);
 
     AuditLog::query()->create([
         'tenant_id' => $tenant->id,
         'user_id' => $admin->id,
         'action' => 'sso.code_issued',
+        'subject_type' => Application::class,
+        'subject_id' => $application->id,
         'ip_address' => '127.0.0.1',
+        'metadata' => [
+            'request' => [
+                'client_id' => 'orders',
+            ],
+        ],
     ]);
     AuditLog::query()->create([
         'tenant_id' => $tenant->id,
@@ -187,6 +521,101 @@ test('audit logs can be filtered by action', function () {
         ->get(route('audit-logs.index', ['search' => 'sso']))
         ->assertOk()
         ->assertInertia(fn ($page) => $page
-            ->where('items.data.0.action', 'sso.code_issued')
+            ->where('resource.label', '操作日志')
+            ->where('resource.columns', ['operator_name', 'operated_at', 'company_name', 'system_name', 'operation_action', 'operation_object', 'request_params', 'ip_address'])
+            ->where('items.data.0.operator_name', $admin->name)
+            ->where('items.data.0.company_name', $tenant->name)
+            ->where('items.data.0.system_name', '订单系统')
+            ->where('items.data.0.operation_action', 'sso.code_issued')
+            ->where('items.data.0.operation_object', 'Application#'.$application->id)
+            ->where('items.data.0.request_params', '{"client_id":"orders"}')
+            ->where('items.data.0.ip_address', '127.0.0.1')
             ->has('items.data', 1));
+});
+
+test('platform admin can see operation logs from all companies', function () {
+    $tenant = Tenant::factory()->create(['name' => 'A 公司']);
+    $otherTenant = Tenant::factory()->create(['name' => 'B 公司']);
+    $admin = User::factory()->platformAdmin()->create();
+    aucGrant($admin, $tenant, ['audit_logs.view']);
+
+    AuditLog::query()->create([
+        'tenant_id' => $tenant->id,
+        'user_id' => $admin->id,
+        'action' => 'tenant.updated',
+        'ip_address' => '127.0.0.1',
+    ]);
+    AuditLog::query()->create([
+        'tenant_id' => $otherTenant->id,
+        'user_id' => $admin->id,
+        'action' => 'tenant.disabled',
+        'ip_address' => '127.0.0.1',
+    ]);
+
+    $this->actingAs($admin)
+        ->get(route('audit-logs.index', ['tenant_id' => $tenant->id]))
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page
+            ->has('items.data', 2)
+            ->where('items.data.0.company_name', 'B 公司')
+            ->where('items.data.1.company_name', 'A 公司'));
+});
+
+test('company admin can only see current company operation logs', function () {
+    $tenant = Tenant::factory()->create(['name' => 'A 公司']);
+    $otherTenant = Tenant::factory()->create(['name' => 'B 公司']);
+    $admin = User::factory()->create();
+    aucGrant($admin, $tenant, ['audit_logs.view']);
+
+    AuditLog::query()->create([
+        'tenant_id' => $tenant->id,
+        'user_id' => $admin->id,
+        'action' => 'tenant.updated',
+        'ip_address' => '127.0.0.1',
+    ]);
+    AuditLog::query()->create([
+        'tenant_id' => $otherTenant->id,
+        'user_id' => $admin->id,
+        'action' => 'tenant.disabled',
+        'ip_address' => '127.0.0.1',
+    ]);
+
+    $this->actingAs($admin)
+        ->get(route('audit-logs.index'))
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page
+            ->has('items.data', 1)
+            ->where('items.data.0.company_name', 'A 公司')
+            ->where('items.data.0.operation_action', 'tenant.updated'));
+
+    $this->get(route('audit-logs.index', ['tenant_id' => $otherTenant->id]))
+        ->assertForbidden();
+});
+
+test('audit logger stores sanitized request parameters', function () {
+    $tenant = Tenant::factory()->create();
+    $admin = User::factory()->create();
+    $request = Request::create('/applications', 'POST', [
+        'name' => '订单系统',
+        'client_secret' => 'plain-secret',
+        'nested' => [
+            'token' => 'plain-token',
+            'safe' => 'value',
+        ],
+    ]);
+    $request->setUserResolver(fn () => $admin);
+
+    app(AuditLogger::class)->log($request, 'application.created', tenant: $tenant, metadata: [
+        'secret' => 'metadata-secret',
+        'safe' => 'metadata-value',
+    ]);
+
+    $metadata = AuditLog::query()->firstOrFail()->metadata;
+
+    expect($metadata['secret'])->toBe('[filtered]');
+    expect($metadata['safe'])->toBe('metadata-value');
+    expect($metadata['request']['name'])->toBe('订单系统');
+    expect($metadata['request']['client_secret'])->toBe('[filtered]');
+    expect($metadata['request']['nested']['token'])->toBe('[filtered]');
+    expect($metadata['request']['nested']['safe'])->toBe('value');
 });

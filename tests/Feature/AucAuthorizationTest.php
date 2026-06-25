@@ -55,6 +55,19 @@ test('platform admins can switch across tenants', function () {
         ->assertRedirect();
 });
 
+test('company owners can manage their company but not platform company records', function () {
+    $tenant = Tenant::factory()->create();
+    $owner = User::factory()->create();
+    aucGrant($owner, $tenant, [], isOwner: true);
+
+    $this->actingAs($owner)
+        ->get(route('applications.index'))
+        ->assertOk();
+
+    $this->get(route('tenants.index'))->assertForbidden();
+    $this->get(route('diagnostics.index'))->assertForbidden();
+});
+
 test('tenant scoped navigation does not leak menus across tenants', function () {
     $firstTenant = Tenant::factory()->create();
     $secondTenant = Tenant::factory()->create();

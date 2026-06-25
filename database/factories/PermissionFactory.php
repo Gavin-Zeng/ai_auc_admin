@@ -21,6 +21,7 @@ class PermissionFactory extends Factory
         $action = fake()->randomElement(['view', 'create', 'update', 'delete']);
 
         return [
+            'application_id' => null,
             'code' => fake()->unique()->bothify($group.'.'.$action.'.###'),
             'name' => fake()->words(2, true),
             'group' => $group,

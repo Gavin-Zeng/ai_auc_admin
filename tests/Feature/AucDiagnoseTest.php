@@ -48,9 +48,7 @@ test('auc diagnose fails when default data is incomplete', function () {
 });
 
 test('diagnostics page exposes readonly report', function () {
-    $tenant = Tenant::factory()->create(['code' => 'default']);
-    $admin = User::factory()->create();
-    aucGrant($admin, $tenant, ['diagnostics.view']);
+    $admin = User::factory()->platformAdmin()->create();
 
     $this->actingAs($admin)
         ->get(route('diagnostics.index'))
@@ -58,4 +56,14 @@ test('diagnostics page exposes readonly report', function () {
         ->assertInertia(fn ($page) => $page
             ->component('admin/Diagnostics')
             ->has('report.checks'));
+});
+
+test('company administrators cannot access platform diagnostics', function () {
+    $tenant = Tenant::factory()->create(['code' => 'default']);
+    $admin = User::factory()->create();
+    aucGrant($admin, $tenant, ['diagnostics.view']);
+
+    $this->actingAs($admin)
+        ->get(route('diagnostics.index'))
+        ->assertForbidden();
 });

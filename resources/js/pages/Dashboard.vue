@@ -41,7 +41,7 @@ defineOptions({
                     <Badge variant="secondary">{{ tenant.name }}</Badge>
                 </div>
                 <p class="max-w-3xl text-sm text-muted-foreground">
-                    当前租户的统一认证、访问权限和业务系统入口。
+                    当前公司的统一认证、访问权限和业务系统入口。
                 </p>
             </div>
             <div
@@ -101,7 +101,7 @@ defineOptions({
             v-if="applications.length === 0"
             class="rounded-lg border border-dashed border-sidebar-border/70 p-8 text-center text-sm text-muted-foreground dark:border-sidebar-border"
         >
-            当前租户暂无可访问应用。
+            当前公司暂无可访问应用。
         </div>
     </div>
 </template>

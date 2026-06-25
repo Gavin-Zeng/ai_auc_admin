@@ -39,6 +39,9 @@ class HandleInertiaRequests extends Middleware
     {
         $user = $request->user();
         $tenant = app(TenantContext::class)->current();
+        $membership = $user !== null && $tenant !== null
+            ? app(TenantContext::class)->membership($user, $tenant)
+            : null;
 
         return [
             ...parent::share($request),
@@ -46,6 +49,11 @@ class HandleInertiaRequests extends Middleware
             'auth' => [
                 'user' => $user,
                 'tenant' => $tenant,
+                'membership' => $membership?->only(['status', 'is_owner', 'permission_version']),
+                'identity' => [
+                    'is_platform_admin' => $user?->isPlatformAdmin() ?? false,
+                    'is_company_owner' => $user !== null && $tenant !== null && $user->isCompanyOwner($tenant),
+                ],
                 'tenants' => fn () => $user === null ? [] : $user->tenants()
                     ->orderBy('name')
                     ->get(['auc_tenants.id', 'auc_tenants.code', 'auc_tenants.name', 'auc_tenants.status']),
