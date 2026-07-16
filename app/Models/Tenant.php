@@ -46,11 +46,11 @@ class Tenant extends Model
     }
 
     /**
-     * @return HasMany<Application, $this>
+     * @return HasMany<TenantApplication, $this>
      */
-    public function applications(): HasMany
+    public function tenantApplications(): HasMany
     {
-        return $this->hasMany(Application::class);
+        return $this->hasMany(TenantApplication::class);
     }
 
     /**

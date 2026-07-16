@@ -12,10 +12,8 @@ test('authenticated users can visit the AUC workspace', function () {
     $user = User::factory()->create();
     aucGrant($user, $tenant, ['dashboard.view']);
 
-    Application::factory()->create([
-        'tenant_id' => $tenant->id,
-        'required_permissions' => ['dashboard.view'],
-    ]);
+    $application = Application::factory()->create();
+    aucOpenApplication($tenant, $application, ['dashboard.view']);
 
     $this->actingAs($user)
         ->get(route('dashboard'))
@@ -38,10 +36,9 @@ test('inactive tenant cannot issue an authorization code', function () {
     aucGrant($user, $tenant, ['dashboard.view']);
 
     $application = Application::factory()->create([
-        'tenant_id' => $tenant->id,
-        'required_permissions' => ['dashboard.view'],
         'redirect_uri' => 'https://client.test/callback',
     ]);
+    aucOpenApplication($tenant, $application, ['dashboard.view']);
 
     $this->actingAs($user)
         ->get(route('sso.authorize', [
@@ -60,10 +57,9 @@ test('users without application permissions cannot authorize', function () {
     aucGrant($user, $tenant, ['dashboard.view']);
 
     $application = Application::factory()->create([
-        'tenant_id' => $tenant->id,
-        'required_permissions' => ['applications.manage'],
         'redirect_uri' => 'https://client.test/callback',
     ]);
+    aucOpenApplication($tenant, $application, ['applications.manage']);
 
     $this->actingAs($user)
         ->get(route('sso.authorize', [
@@ -76,16 +72,56 @@ test('users without application permissions cannot authorize', function () {
     expect(AuditLog::query()->where('action', 'sso.application_access_denied')->exists())->toBeTrue();
 });
 
+test('tenant cannot authorize a global system until it is opened for that tenant', function () {
+    $tenant = Tenant::factory()->create();
+    $user = User::factory()->create();
+    aucGrant($user, $tenant, ['dashboard.view']);
+
+    $application = Application::factory()->create([
+        'redirect_uri' => 'https://client.test/callback',
+    ]);
+
+    $this->actingAs($user)
+        ->get(route('sso.authorize', [
+            'client_id' => $application->client_id,
+            'redirect_uri' => $application->redirect_uri,
+            'tenant_id' => $tenant->id,
+        ]))
+        ->assertForbidden();
+
+    expect(AuditLog::query()->where('action', 'sso.application_unavailable')->exists())->toBeTrue();
+});
+
+test('disabled tenant application cannot authorize a global system', function () {
+    $tenant = Tenant::factory()->create();
+    $user = User::factory()->create();
+    aucGrant($user, $tenant, ['dashboard.view']);
+
+    $application = Application::factory()->create([
+        'redirect_uri' => 'https://client.test/callback',
+    ]);
+    aucOpenApplication($tenant, $application, ['dashboard.view'], 'disabled');
+
+    $this->actingAs($user)
+        ->get(route('sso.authorize', [
+            'client_id' => $application->client_id,
+            'redirect_uri' => $application->redirect_uri,
+            'tenant_id' => $tenant->id,
+        ]))
+        ->assertForbidden();
+
+    expect(AuditLog::query()->where('action', 'sso.application_unavailable')->exists())->toBeTrue();
+});
+
 test('authorization code can only be exchanged once', function () {
     $tenant = Tenant::factory()->create();
     $user = User::factory()->create();
     aucGrant($user, $tenant, ['dashboard.view']);
 
     $application = Application::factory()->create([
-        'tenant_id' => $tenant->id,
         'client_secret' => 'plain-secret',
-        'required_permissions' => ['dashboard.view'],
     ]);
+    aucOpenApplication($tenant, $application, ['dashboard.view']);
 
     Menu::factory()->create([
         'tenant_id' => $tenant->id,
@@ -129,10 +165,9 @@ test('expired authorization code cannot be exchanged', function () {
     aucGrant($user, $tenant, ['dashboard.view']);
 
     $application = Application::factory()->create([
-        'tenant_id' => $tenant->id,
         'client_secret' => 'plain-secret',
-        'required_permissions' => ['dashboard.view'],
     ]);
+    aucOpenApplication($tenant, $application, ['dashboard.view']);
 
     SsoAuthCode::query()->create([
         'tenant_id' => $tenant->id,
@@ -154,10 +189,7 @@ test('expired authorization code cannot be exchanged', function () {
 });
 
 test('token exchange rejects invalid client secret and audits the failure', function () {
-    $tenant = Tenant::factory()->create();
-
     $application = Application::factory()->create([
-        'tenant_id' => $tenant->id,
         'client_secret' => 'plain-secret',
     ]);
 
@@ -179,11 +211,10 @@ test('token exchange rejects redirect uri mismatch', function () {
     aucGrant($user, $tenant, ['dashboard.view']);
 
     $application = Application::factory()->create([
-        'tenant_id' => $tenant->id,
         'client_secret' => 'plain-secret',
-        'required_permissions' => ['dashboard.view'],
         'redirect_uri' => 'https://client.test/callback',
     ]);
+    aucOpenApplication($tenant, $application, ['dashboard.view']);
 
     SsoAuthCode::query()->create([
         'tenant_id' => $tenant->id,
@@ -212,11 +243,10 @@ test('disabled application cannot exchange token', function () {
     aucGrant($user, $tenant, ['dashboard.view']);
 
     $application = Application::factory()->create([
-        'tenant_id' => $tenant->id,
         'client_secret' => 'plain-secret',
         'status' => 'disabled',
-        'required_permissions' => ['dashboard.view'],
     ]);
+    aucOpenApplication($tenant, $application, ['dashboard.view']);
 
     SsoAuthCode::query()->create([
         'tenant_id' => $tenant->id,
@@ -245,10 +275,9 @@ test('disabled tenant cannot exchange token and is audited', function () {
     aucGrant($user, $tenant, ['dashboard.view']);
 
     $application = Application::factory()->create([
-        'tenant_id' => $tenant->id,
         'client_secret' => 'plain-secret',
-        'required_permissions' => ['dashboard.view'],
     ]);
+    aucOpenApplication($tenant, $application, ['dashboard.view']);
 
     SsoAuthCode::query()->create([
         'tenant_id' => $tenant->id,
@@ -278,16 +307,15 @@ test('tenant switch changes navigation and applications', function () {
     aucGrant($user, $firstTenant, ['dashboard.view']);
     aucGrant($user, $secondTenant, ['applications.manage']);
 
-    Application::factory()->create([
-        'tenant_id' => $firstTenant->id,
+    $firstApplication = Application::factory()->create([
         'name' => 'First App',
-        'required_permissions' => ['dashboard.view'],
     ]);
-    Application::factory()->create([
-        'tenant_id' => $secondTenant->id,
+    aucOpenApplication($firstTenant, $firstApplication, ['dashboard.view']);
+
+    $secondApplication = Application::factory()->create([
         'name' => 'Second App',
-        'required_permissions' => ['applications.manage'],
     ]);
+    aucOpenApplication($secondTenant, $secondApplication, ['applications.manage']);
 
     $this->actingAs($user)
         ->post(route('tenant.switch'), ['tenant_id' => $secondTenant->id])

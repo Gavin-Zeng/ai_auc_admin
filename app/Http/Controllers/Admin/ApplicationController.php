@@ -8,6 +8,8 @@ use App\Models\Application;
 use App\Models\Menu;
 use App\Models\Permission;
 use App\Models\Role;
+use App\Models\Tenant;
+use App\Models\TenantApplication;
 use App\Support\AuditLogger;
 use App\Support\PermissionVersion;
 use App\Support\TenantContext;
@@ -33,7 +35,16 @@ class ApplicationController extends Controller
     {
         $tenant = app(TenantContext::class)->current() ?? app(TenantContext::class)->resolveForRequest($request);
 
-        return Application::query()->where('tenant_id', $tenant?->id);
+        return Application::query()
+            ->when(! $request->user()?->isPlatformAdmin(), fn (Builder $query) => $query
+                ->whereHas('tenantApplications', fn (Builder $query) => $query
+                    ->where('tenant_id', $tenant?->id)
+                    ->where('status', 'active')));
+    }
+
+    protected function searchColumns(): array
+    {
+        return ['name', 'client_id', 'base_url'];
     }
 
     protected function resourceConfig(Request $request): array
@@ -44,18 +55,16 @@ class ApplicationController extends Controller
             'description' => '配置业务系统的 SSO 接入地址、密钥和访问权限。',
             'createLabel' => '新增系统',
             'storeUrl' => route('applications.store'),
+            'readOnly' => ! $request->user()?->isPlatformAdmin(),
             'fields' => [
-                ['name' => 'code', 'label' => '编码', 'type' => 'text', 'required' => true, 'span' => 1, 'group' => '基础信息'],
                 ['name' => 'name', 'label' => '名称', 'type' => 'text', 'required' => true, 'span' => 1, 'group' => '基础信息'],
-                ['name' => 'client_id', 'label' => '客户端 ID', 'type' => 'text', 'required' => true, 'span' => 1, 'group' => 'SSO 配置'],
-                ['name' => 'client_secret', 'label' => '客户端密钥', 'type' => 'text', 'span' => 1, 'group' => 'SSO 配置'],
-                ['name' => 'base_url', 'label' => '基础地址', 'type' => 'text', 'required' => true, 'span' => 1, 'group' => '地址配置'],
-                ['name' => 'redirect_uri', 'label' => '回调地址', 'type' => 'text', 'required' => true, 'span' => 1, 'group' => '地址配置'],
-                ['name' => 'icon', 'label' => '图标', 'type' => 'text', 'span' => 1, 'group' => '展示'],
+                ['name' => 'client_id', 'label' => '客户端 ID', 'type' => 'text', 'required' => true, 'span' => 1, 'group' => '基础信息'],
+                ['name' => 'client_secret', 'label' => '客户端密钥', 'type' => 'text', 'default' => '', 'createOnly' => true, 'span' => 2, 'group' => '基础信息'],
+                ['name' => 'base_url', 'label' => '基础地址', 'type' => 'text', 'required' => true, 'span' => 1, 'group' => 'SSO 配置'],
+                ['name' => 'redirect_uri', 'label' => '回调地址', 'type' => 'text', 'required' => true, 'span' => 1, 'group' => 'SSO 配置'],
                 ['name' => 'status', 'label' => '状态', 'type' => 'select', 'options' => ['active', 'disabled'], 'default' => 'active', 'updateOnly' => true, 'span' => 1, 'group' => '展示'],
-                ['name' => 'required_permissions', 'label' => '所需权限', 'type' => 'multiselect', 'span' => 2, 'group' => '授权'],
             ],
-            'columns' => ['code', 'name', 'client_id', 'base_url', 'status'],
+            'columns' => ['name', 'client_id', 'base_url', 'status'],
             'actions' => ['rotateSecret'],
         ];
     }
@@ -64,14 +73,14 @@ class ApplicationController extends Controller
     {
         return [
             'required_permissions' => Permission::query()
-                ->where(function (Builder $query): void {
-                    $query->whereNull('application_id')
-                        ->orWhereIn('application_id', Application::query()
-                            ->where('tenant_id', app(TenantContext::class)->current()?->id)
-                            ->select('id'));
-                })
                 ->orderBy('code')
-                ->pluck('code')
+                ->get(['code', 'name'])
+                ->map(fn (Permission $permission) => [
+                    'value' => $permission->code,
+                    'label' => filled($permission->name)
+                        ? "{$permission->code}（{$permission->name}）"
+                        : $permission->code,
+                ])
                 ->values(),
         ];
     }
@@ -80,7 +89,7 @@ class ApplicationController extends Controller
     {
         $tenant = $tenantContext->current() ?? $tenantContext->resolveForRequest($request);
         abort_if($tenant === null, 403);
-        $this->authorizeResourceModel($application, $tenant);
+        abort_unless($request->user()?->isPlatformAdmin() || $application->tenantApplications()->where('tenant_id', $tenant->id)->exists(), 403);
 
         $permissions = Permission::query()
             ->where('application_id', $application->id)
@@ -96,7 +105,7 @@ class ApplicationController extends Controller
 
         return Inertia::render('admin/ApplicationShow', [
             'application' => [
-                ...$application->only(['id', 'tenant_id', 'code', 'name', 'client_id', 'base_url', 'redirect_uri', 'icon', 'required_permissions', 'status']),
+                ...$application->only(['id', 'name', 'client_id', 'base_url', 'redirect_uri', 'icon', 'status']),
                 'secret_configured' => filled($application->client_secret),
             ],
             'tenant' => $tenant->only(['id', 'code', 'name', 'status']),
@@ -104,9 +113,13 @@ class ApplicationController extends Controller
             'menus' => $this->buildMenuTree($menus, null),
             'flatMenus' => $menus->values(),
             'authorization' => [
-                'required_permissions' => $application->required_permissions ?? [],
-                'roles' => $this->authorizedRoles($tenant->id, $application->required_permissions ?? []),
+                'required_permissions' => $this->tenantApplication($tenant, $application)?->required_permissions ?? [],
+                'roles' => $this->authorizedRoles($tenant->id, $this->tenantApplication($tenant, $application)?->required_permissions ?? []),
             ],
+            'tenantApplications' => $this->tenantApplicationRows($application, $request->user()?->isPlatformAdmin() ? null : $tenant->id),
+            'tenantOptions' => $request->user()?->isPlatformAdmin() ? $this->tenantOptions() : [],
+            'permissionOptions' => $this->resourceOptions($request)['required_permissions'],
+            'canManageTenantApplications' => $request->user()?->isPlatformAdmin() === true,
             'checks' => $this->integrationChecks($application, $tenant),
         ]);
     }
@@ -114,47 +127,79 @@ class ApplicationController extends Controller
     protected function rules(Request $request, ?Model $model = null): array
     {
         return [
-            'code' => ['required', 'string', 'max:80'],
             'name' => ['required', 'string', 'max:120'],
             'client_id' => ['required', 'string', 'max:120', $this->unique('auc_applications', 'client_id', $model)],
-            'client_secret' => [$model === null ? 'required' : 'nullable', 'string', 'max:200'],
+            'client_secret' => [$model === null ? 'nullable' : 'prohibited', 'string', 'max:200'],
             'base_url' => ['required', 'url', 'max:500'],
             'redirect_uri' => ['required', 'url', 'max:500'],
             'icon' => ['nullable', 'string', 'max:120'],
             'status' => [$model === null ? 'nullable' : 'required', 'in:active,disabled'],
-            'required_permissions' => ['nullable', 'array'],
-            'required_permissions.*' => ['string', 'exists:auc_permissions,code'],
         ];
     }
 
     protected function prepareData(Request $request, array $data, ?Model $model = null): array
     {
-        $data['tenant_id'] = app(TenantContext::class)->current()?->id;
-        $data['required_permissions'] ??= [];
-        $data['status'] ??= 'active';
+        abort_unless($request->user()?->isPlatformAdmin(), 403);
 
-        if (($data['client_secret'] ?? null) === null && $model !== null) {
+        $data['status'] ??= 'active';
+        $data['client_secret'] = filled($request->string('client_secret')->toString())
+            ? $request->string('client_secret')->toString()
+            : Str::password(32);
+
+        if ($model !== null) {
             unset($data['client_secret']);
         }
 
         return $data;
     }
 
+    protected function authorizeResourceModel(Model $model, mixed $tenant): void
+    {
+        abort_unless(request()->user()?->isPlatformAdmin(), 403);
+    }
+
     protected function afterWrite(Request $request, Model $model, mixed $tenant, PermissionVersion $permissionVersion): void
     {
-        $permissionVersion->bump($tenant);
+        Tenant::query()->each(fn (Tenant $tenant): mixed => $permissionVersion->bump($tenant));
     }
 
     public function rotateSecret(Request $request, Application $application, AuditLogger $auditLogger): RedirectResponse
     {
         $tenant = app(TenantContext::class)->current() ?? app(TenantContext::class)->resolveForRequest($request);
-        $this->authorizeResourceModel($application, $tenant);
+        abort_unless($request->user()?->isPlatformAdmin(), 403);
 
         $secret = Str::password(32);
         $application->forceFill(['client_secret' => $secret])->save();
         $auditLogger->log($request, 'application.secret_rotated', $application, $tenant);
 
         return back()->with('secret', $secret);
+    }
+
+    public function openForTenant(Request $request, Application $application, AuditLogger $auditLogger, PermissionVersion $permissionVersion): RedirectResponse
+    {
+        abort_unless($request->user()?->isPlatformAdmin(), 403);
+
+        $data = $request->validate([
+            'tenant_id' => ['required', 'integer', 'exists:auc_tenants,id'],
+            'required_permissions' => ['nullable', 'array'],
+            'required_permissions.*' => ['string', 'exists:auc_permissions,code'],
+            'status' => ['nullable', 'in:active,disabled'],
+            'sort_order' => ['nullable', 'integer', 'min:0'],
+        ]);
+
+        $tenantApplication = TenantApplication::query()->updateOrCreate([
+            'tenant_id' => $data['tenant_id'],
+            'application_id' => $application->id,
+        ], [
+            'required_permissions' => $data['required_permissions'] ?? [],
+            'status' => $data['status'] ?? 'active',
+            'sort_order' => $data['sort_order'] ?? 0,
+        ]);
+
+        $permissionVersion->bump($tenantApplication->tenant);
+        $auditLogger->log($request, 'tenant_application.opened', $tenantApplication, $tenantApplication->tenant);
+
+        return back()->with('status', '公司系统开通配置已保存。');
     }
 
     /**
@@ -199,6 +244,56 @@ class ApplicationController extends Controller
             ->orderBy('code')
             ->get(['id', 'code', 'name', 'status'])
             ->map(fn (Role $role) => $role->only(['id', 'code', 'name', 'status']))
+            ->values()
+            ->all();
+    }
+
+    private function tenantApplication(mixed $tenant, Application $application): ?TenantApplication
+    {
+        return TenantApplication::query()
+            ->where('tenant_id', $tenant->id)
+            ->where('application_id', $application->id)
+            ->first();
+    }
+
+    /**
+     * @return list<array<string, mixed>>
+     */
+    private function tenantApplicationRows(Application $application, ?int $tenantId = null): array
+    {
+        return TenantApplication::query()
+            ->with('tenant')
+            ->where('application_id', $application->id)
+            ->when($tenantId !== null, fn (Builder $query) => $query->where('tenant_id', $tenantId))
+            ->orderBy('sort_order')
+            ->orderBy('id')
+            ->get()
+            ->map(fn (TenantApplication $tenantApplication) => [
+                'id' => $tenantApplication->id,
+                'tenant_id' => $tenantApplication->tenant_id,
+                'tenant_name' => $tenantApplication->tenant?->name,
+                'required_permissions' => $tenantApplication->required_permissions ?? [],
+                'status' => $tenantApplication->status,
+                'sort_order' => $tenantApplication->sort_order,
+            ])
+            ->values()
+            ->all();
+    }
+
+    /**
+     * @return list<array{value: int, label: string}>
+     */
+    private function tenantOptions(): array
+    {
+        return Tenant::query()
+            ->orderBy('name')
+            ->get(['id', 'name', 'status'])
+            ->map(fn (Tenant $tenant) => [
+                'value' => $tenant->id,
+                'label' => $tenant->status === 'active'
+                    ? $tenant->name
+                    : "{$tenant->name}（已停用）",
+            ])
             ->values()
             ->all();
     }

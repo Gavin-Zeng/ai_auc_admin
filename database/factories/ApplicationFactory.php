@@ -3,7 +3,6 @@
 namespace Database\Factories;
 
 use App\Models\Application;
-use App\Models\Tenant;
 use Illuminate\Database\Eloquent\Factories\Factory;
 use Illuminate\Support\Str;
 
@@ -19,18 +18,15 @@ class ApplicationFactory extends Factory
      */
     public function definition(): array
     {
-        $code = fake()->unique()->slug(2);
+        $clientId = 'auc_'.fake()->unique()->slug(2).'_'.Str::random(8);
 
         return [
-            'tenant_id' => Tenant::factory(),
-            'code' => $code,
             'name' => fake()->words(2, true),
-            'client_id' => 'auc_'.$code.'_'.Str::random(8),
+            'client_id' => $clientId,
             'client_secret' => Str::random(48),
-            'base_url' => 'https://'.$code.'.example.test',
-            'redirect_uri' => 'https://'.$code.'.example.test/sso/callback',
+            'base_url' => 'https://'.Str::slug(fake()->unique()->words(2, true)).'.example.test',
+            'redirect_uri' => 'https://'.Str::slug(fake()->unique()->words(2, true)).'.example.test/sso/callback',
             'icon' => null,
-            'required_permissions' => [],
             'status' => 'active',
         ];
     }

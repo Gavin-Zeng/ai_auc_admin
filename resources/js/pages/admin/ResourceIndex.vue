@@ -2,7 +2,10 @@
 import { Head, Link, router, useForm, usePage } from '@inertiajs/vue3';
 import { Eye, KeyRound, Pencil, Plus, Search } from 'lucide-vue-next';
 import { computed, ref, watch } from 'vue';
-import { show as showApplication } from '@/routes/applications';
+import {
+    show as showApplication,
+    store as storeApplication,
+} from '@/routes/applications';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -18,13 +21,23 @@ import {
 
 type FieldOption =
     | string
-    | { value: number | string; label: string; tenant_id?: number | string | null };
+    | {
+          value: number | string;
+          label: string;
+          tenant_id?: number | string | null;
+      };
 
 type FieldConfig = {
     name: string;
     label: string;
     description?: string;
-    type: 'text' | 'number' | 'select' | 'textarea' | 'checkbox' | 'multiselect';
+    type:
+        | 'text'
+        | 'number'
+        | 'select'
+        | 'textarea'
+        | 'checkbox'
+        | 'multiselect';
     required?: boolean;
     options?: FieldOption[];
     default?: unknown;
@@ -159,6 +172,13 @@ function fieldOptions(field: FieldConfig): FieldOption[] {
     return field.options ?? props.options[field.name] ?? [];
 }
 
+function generateSecret(): void {
+    form.client_secret =
+        Math.random().toString(36).slice(2) +
+        Math.random().toString(36).slice(2) +
+        Math.random().toString(36).slice(2);
+}
+
 function requestPayload(): Record<string, any> {
     const fieldNames = new Set(visibleFields.value.map((field) => field.name));
 
@@ -181,9 +201,8 @@ function startEdit(item: Record<string, any>) {
 
     for (const field of props.resource.fields) {
         const value = item[field.name] ?? values[field.name];
-        values[field.name] = field.type === 'select' && value !== ''
-            ? String(value)
-            : value;
+        values[field.name] =
+            field.type === 'select' && value !== '' ? String(value) : value;
     }
 
     form.defaults(values);
@@ -192,8 +211,13 @@ function startEdit(item: Record<string, any>) {
     showForm.value = true;
 }
 
-function statusPayload(item: Record<string, any>, status: string): Record<string, any> {
-    const fieldNames = new Set(props.resource.fields.map((field) => field.name));
+function statusPayload(
+    item: Record<string, any>,
+    status: string,
+): Record<string, any> {
+    const fieldNames = new Set(
+        props.resource.fields.map((field) => field.name),
+    );
     const payload = Object.fromEntries(
         Object.entries(item).filter(([key]) => fieldNames.has(key)),
     );
@@ -220,7 +244,12 @@ function submit() {
         return;
     }
 
-    form.post(props.resource.storeUrl ?? `/${props.resource.name}`, {
+    const storeUrl =
+        props.resource.name === 'applications'
+            ? storeApplication().url
+            : (props.resource.storeUrl ?? `/${props.resource.name}`);
+
+    form.post(storeUrl, {
         preserveScroll: true,
         onSuccess: () => (showForm.value = false),
         onFinish: () => form.transform((data) => data),
@@ -309,7 +338,11 @@ function displayValue(item: Record<string, any>, column: string): string {
     const value = item[column];
     const field = props.resource.fields.find((field) => field.name === column);
 
-    if (['is_owner', 'is_platform_admin', 'is_system', 'is_visible'].includes(column)) {
+    if (
+        ['is_owner', 'is_platform_admin', 'is_system', 'is_visible'].includes(
+            column,
+        )
+    ) {
         return Boolean(value) ? '是' : '否';
     }
 
@@ -346,7 +379,11 @@ watch(
         }
 
         const allowedRoleIds = new Set(
-            fieldOptions({ name: 'role_ids', label: '角色', type: 'multiselect' }).map(optionValue),
+            fieldOptions({
+                name: 'role_ids',
+                label: '角色',
+                type: 'multiselect',
+            }).map(optionValue),
         );
 
         form.role_ids = (form.role_ids ?? [])
@@ -383,7 +420,7 @@ watch(
             class="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900 dark:border-amber-900/60 dark:bg-amber-950/40 dark:text-amber-100"
         >
             <div class="font-medium">新的系统密钥只显示一次</div>
-            <div class="mt-2 break-all font-mono">{{ rotatedSecret }}</div>
+            <div class="mt-2 font-mono break-all">{{ rotatedSecret }}</div>
         </div>
 
         <div
@@ -421,13 +458,15 @@ watch(
                 :key="field.name"
                 :class="fieldClass(field)"
             >
-                <Label :for="field.name" class="text-xs font-medium">{{ field.label }}</Label>
+                <Label :for="field.name" class="text-xs font-medium">{{
+                    field.label
+                }}</Label>
 
                 <textarea
                     v-if="field.type === 'textarea'"
                     :id="field.name"
                     v-model="form[field.name]"
-                    class="border-input min-h-16 w-full rounded-md border bg-transparent px-3 py-2 text-sm"
+                    class="min-h-16 w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm"
                 />
 
                 <div
@@ -442,10 +481,8 @@ watch(
                     <span class="text-sm text-muted-foreground">是</span>
                 </div>
 
-                <Select
-                    v-else-if="field.type === 'select'"
-                    v-model="form[field.name]"
-                >
+                <div v-else-if="field.type === 'select'" class="space-y-1.5">
+                    <Select v-model="form[field.name]">
                     <SelectTrigger class="w-full">
                         <SelectValue :placeholder="field.label" />
                     </SelectTrigger>
@@ -458,7 +495,14 @@ watch(
                             {{ optionLabel(option) }}
                         </SelectItem>
                     </SelectContent>
-                </Select>
+                    </Select>
+                    <div
+                        v-if="field.description"
+                        class="text-xs text-muted-foreground"
+                    >
+                        {{ field.description }}
+                    </div>
+                </div>
 
                 <div
                     v-else-if="field.type === 'multiselect'"
@@ -489,12 +533,43 @@ watch(
                     </div>
                 </div>
 
-                <Input
-                    v-else
-                    :id="field.name"
-                    v-model="form[field.name]"
-                    :type="field.type"
-                />
+                <div v-else class="space-y-1.5">
+                    <div
+                        v-if="
+                            resource.name === 'applications' &&
+                            field.name === 'client_secret' &&
+                            !editing
+                        "
+                        class="flex gap-2"
+                    >
+                        <Input
+                            :id="field.name"
+                            v-model="form[field.name]"
+                            :type="field.type"
+                            placeholder="点击右侧按钮生成"
+                        />
+                        <Button
+                            type="button"
+                            variant="secondary"
+                            class="shrink-0"
+                            @click="generateSecret"
+                        >
+                            生成密钥
+                        </Button>
+                    </div>
+                    <Input
+                        v-else
+                        :id="field.name"
+                        v-model="form[field.name]"
+                        :type="field.type"
+                    />
+                    <div
+                        v-if="field.description"
+                        class="text-xs text-muted-foreground"
+                    >
+                        {{ field.description }}
+                    </div>
+                </div>
 
                 <div v-if="form.errors[field.name]" class="text-sm text-red-600">
                     {{ form.errors[field.name] }}
@@ -585,6 +660,7 @@ watch(
                                 </Button>
                                 <Button
                                     v-if="
+                                        !resource.readOnly &&
                                         resource.actions?.includes(
                                             'rotateSecret',
                                         )
@@ -600,7 +676,10 @@ watch(
                     </tr>
                     <tr v-if="items.data.length === 0">
                         <td
-                            :colspan="resource.columns.length + (shouldShowActions() ? 1 : 0)"
+                            :colspan="
+                                resource.columns.length +
+                                (shouldShowActions() ? 1 : 0)
+                            "
                             class="px-3 py-8 text-center text-muted-foreground"
                         >
                             暂无数据。

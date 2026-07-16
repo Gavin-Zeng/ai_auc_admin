@@ -34,11 +34,11 @@ test('auc diagnose passes when default seed data is complete', function () {
     ]);
     $role->permissions()->sync($permissions->pluck('id')->all());
 
-    Application::factory()->create([
-        'tenant_id' => $tenant->id,
-        'code' => 'auc-admin',
+    $application = Application::factory()->create([
+        'client_id' => 'auc-admin',
         'redirect_uri' => 'http://localhost/demo-subsystem/sso/callback',
     ]);
+    aucOpenApplication($tenant, $application);
 
     $this->artisan('auc:diagnose')->assertSuccessful();
 });

@@ -5,7 +5,7 @@ namespace App\Models;
 use Database\Factories\ApplicationFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Support\Facades\Hash;
 
 class Application extends Model
@@ -26,24 +26,21 @@ class Application extends Model
      * @var list<string>
      */
     protected $fillable = [
-        'tenant_id',
-        'code',
         'name',
         'client_id',
         'client_secret',
         'base_url',
         'redirect_uri',
         'icon',
-        'required_permissions',
         'status',
     ];
 
     /**
-     * @return BelongsTo<Tenant, $this>
+     * @return HasMany<TenantApplication, $this>
      */
-    public function tenant(): BelongsTo
+    public function tenantApplications(): HasMany
     {
-        return $this->belongsTo(Tenant::class);
+        return $this->hasMany(TenantApplication::class);
     }
 
     public function isActive(): bool
@@ -61,8 +58,6 @@ class Application extends Model
      */
     protected function casts(): array
     {
-        return [
-            'required_permissions' => 'array',
-        ];
+        return [];
     }
 }

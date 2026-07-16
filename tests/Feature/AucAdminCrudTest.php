@@ -375,23 +375,36 @@ test('resources create forms do not expose status and still save active by defau
         ->get(route('applications.index'))
         ->assertOk()
         ->assertInertia(fn ($page) => $page
-            ->where('resource.fields.7.updateOnly', true)
-            ->where('resource.fields.7.default', 'active'));
+            ->where('resource.fields.0.name', 'name')
+            ->where('resource.fields.1.name', 'client_id')
+            ->where('resource.fields.2.name', 'client_secret')
+            ->where('resource.fields.2.default', '')
+            ->where('resource.fields.5.updateOnly', true)
+            ->where('resource.fields.5.default', 'active'));
 
-    $application = Application::factory()->make(['tenant_id' => $tenant->id]);
+    $application = Application::factory()->make();
     $this->actingAs($admin)
         ->post(route('applications.store'), [
-            'code' => $application->code,
             'name' => $application->name,
             'client_id' => $application->client_id,
-            'client_secret' => 'secret123',
+            'client_secret' => 'plain-generated-secret',
             'base_url' => $application->base_url,
             'redirect_uri' => $application->redirect_uri,
-            'required_permissions' => [],
         ])
         ->assertRedirect();
 
     expect(Application::query()->where('client_id', $application->client_id)->value('status'))->toBe('active');
+    expect(Hash::check('plain-generated-secret', Application::query()->where('client_id', $application->client_id)->value('client_secret')))->toBeTrue();
+
+    $secondApplication = Application::factory()->make();
+    $this->post(route('applications.store'), [
+        'name' => $secondApplication->name,
+        'client_id' => $secondApplication->client_id,
+        'base_url' => $secondApplication->base_url,
+        'redirect_uri' => $secondApplication->redirect_uri,
+    ])->assertRedirect();
+
+    expect(filled(Application::query()->where('client_id', $secondApplication->client_id)->value('client_secret')))->toBeTrue();
 });
 
 test('role management list includes company name', function () {
@@ -409,15 +422,81 @@ test('role management list includes company name', function () {
 
 test('system management resource uses system wording', function () {
     $tenant = Tenant::factory()->create();
-    $admin = User::factory()->create();
+    $admin = User::factory()->platformAdmin()->create();
     aucGrant($admin, $tenant, ['applications.manage']);
 
     $this->actingAs($admin)
         ->get(route('applications.index'))
         ->assertOk()
         ->assertInertia(fn ($page) => $page
+            ->where('resource.columns', ['name', 'client_id', 'base_url', 'status'])
             ->where('resource.label', '系统管理')
-            ->where('resource.createLabel', '新增系统'));
+            ->where('resource.createLabel', '新增系统')
+            ->where('resource.readOnly', false));
+});
+
+test('platform admin can open one global system for multiple companies', function () {
+    $firstTenant = Tenant::factory()->create(['name' => 'A 公司']);
+    $secondTenant = Tenant::factory()->create(['name' => 'B 公司']);
+    $admin = User::factory()->platformAdmin()->create();
+    aucGrant($admin, $firstTenant, ['applications.manage']);
+    Permission::factory()->create(['code' => 'support.access', 'name' => '客服入口', 'status' => 'active']);
+
+    $application = Application::factory()->create([
+        'name' => '客服系统',
+        'client_id' => 'support-client',
+    ]);
+
+    $this->actingAs($admin)
+        ->post(route('applications.tenant-applications.store', $application), [
+            'tenant_id' => $firstTenant->id,
+            'required_permissions' => ['support.access'],
+            'status' => 'active',
+        ])
+        ->assertRedirect();
+
+    $this->post(route('applications.tenant-applications.store', $application), [
+        'tenant_id' => $secondTenant->id,
+        'required_permissions' => [],
+        'status' => 'active',
+    ])->assertRedirect();
+
+    expect($application->tenantApplications()->count())->toBe(2);
+
+    $this->get(route('applications.show', $application))
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page
+            ->where('tenantApplications.0.tenant_name', 'A 公司')
+            ->where('tenantApplications.1.tenant_name', 'B 公司')
+            ->where('tenantApplications.0.required_permissions.0', 'support.access'));
+});
+
+test('company admin sees only opened systems as read only', function () {
+    $tenant = Tenant::factory()->create();
+    $otherTenant = Tenant::factory()->create();
+    $admin = User::factory()->create();
+    aucGrant($admin, $tenant, ['applications.manage']);
+
+    $application = Application::factory()->create(['name' => '已开通系统']);
+    $hiddenApplication = Application::factory()->create(['name' => '未开通系统']);
+    aucOpenApplication($tenant, $application);
+    aucOpenApplication($otherTenant, $hiddenApplication);
+
+    $this->actingAs($admin)
+        ->get(route('applications.index'))
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page
+            ->where('resource.readOnly', true)
+            ->where('items.data.0.name', '已开通系统')
+            ->missing('items.data.1'));
+
+    $this->put(route('applications.update', $application), [
+        'name' => 'Blocked',
+        'client_id' => $application->client_id,
+        'base_url' => $application->base_url,
+        'redirect_uri' => $application->redirect_uri,
+        'status' => 'active',
+    ])->assertForbidden();
 });
 
 test('menu management list includes system name', function () {
@@ -426,7 +505,6 @@ test('menu management list includes system name', function () {
     aucGrant($admin, $tenant, ['menus.manage']);
 
     $application = Application::factory()->create([
-        'tenant_id' => $tenant->id,
         'name' => '投放系统',
     ]);
     Menu::factory()->create([
@@ -454,11 +532,10 @@ test('default menus use system and operation log titles', function () {
 
 test('application secret can be rotated and audited', function () {
     $tenant = Tenant::factory()->create();
-    $admin = User::factory()->create();
+    $admin = User::factory()->platformAdmin()->create();
     aucGrant($admin, $tenant, ['applications.manage']);
 
     $application = Application::factory()->create([
-        'tenant_id' => $tenant->id,
         'client_secret' => 'old-secret',
     ]);
 
@@ -473,14 +550,12 @@ test('application secret can be rotated and audited', function () {
 
 test('application changes bump permission version and hide client secret from admin props', function () {
     $tenant = Tenant::factory()->create();
-    $admin = User::factory()->create();
+    $admin = User::factory()->platformAdmin()->create();
     aucGrant($admin, $tenant, ['applications.manage']);
 
     $application = Application::factory()->create([
-        'tenant_id' => $tenant->id,
         'client_id' => 'billing-client',
         'client_secret' => 'visible-once',
-        'required_permissions' => [],
     ]);
     $before = TenantUser::query()
         ->where('tenant_id', $tenant->id)
@@ -489,13 +564,11 @@ test('application changes bump permission version and hide client secret from ad
 
     $this->actingAs($admin)
         ->put(route('applications.update', $application), [
-            'code' => $application->code,
             'name' => $application->name,
             'client_id' => $application->client_id,
             'base_url' => $application->base_url,
             'redirect_uri' => $application->redirect_uri,
             'status' => 'active',
-            'required_permissions' => ['applications.manage'],
         ])
         ->assertRedirect();
 
@@ -513,16 +586,15 @@ test('application changes bump permission version and hide client secret from ad
 
 test('application detail groups sso config permissions menus authorization and checks', function () {
     $tenant = Tenant::factory()->create();
-    $admin = User::factory()->create();
+    $admin = User::factory()->platformAdmin()->create();
     aucGrant($admin, $tenant, ['applications.manage', 'orders.view']);
 
     $application = Application::factory()->create([
-        'tenant_id' => $tenant->id,
-        'code' => 'orders',
         'name' => '订单系统',
+        'client_id' => 'orders-client',
         'client_secret' => 'visible-once',
-        'required_permissions' => ['orders.view'],
     ]);
+    aucOpenApplication($tenant, $application, ['orders.view']);
 
     Permission::query()
         ->where('code', 'orders.view')
@@ -544,11 +616,12 @@ test('application detail groups sso config permissions menus authorization and c
         ->assertOk()
         ->assertInertia(fn ($page) => $page
             ->component('admin/ApplicationShow')
-            ->where('application.code', 'orders')
+            ->where('application.client_id', 'orders-client')
             ->where('application.secret_configured', true)
             ->where('permissions.0.code', 'orders.view')
             ->where('menus.0.title', '订单管理')
             ->where('authorization.required_permissions.0', 'orders.view')
+            ->where('tenantApplications.0.tenant_id', $tenant->id)
             ->where('checks.0.passed', true)
             ->missing('application.client_secret'));
 });
@@ -563,10 +636,8 @@ test('permission snapshot exposes versioned local authorization data', function 
         'title' => 'Dashboard',
         'required_permissions' => ['dashboard.view'],
     ]);
-    Application::factory()->create([
-        'tenant_id' => $tenant->id,
-        'required_permissions' => ['dashboard.view'],
-    ]);
+    $application = Application::factory()->create();
+    aucOpenApplication($tenant, $application, ['dashboard.view']);
 
     $this->actingAs($user)
         ->getJson(route('api.permissions.snapshot'))
@@ -586,17 +657,16 @@ test('tenant admin cannot manage records in another tenant', function () {
     $admin = User::factory()->create();
     aucGrant($admin, $tenant, ['applications.manage']);
 
-    $application = Application::factory()->create(['tenant_id' => $otherTenant->id]);
+    $application = Application::factory()->create();
+    aucOpenApplication($otherTenant, $application);
 
     $this->actingAs($admin)
         ->put(route('applications.update', $application), [
-            'code' => 'blocked',
             'name' => 'Blocked',
             'client_id' => $application->client_id,
             'base_url' => 'https://blocked.example.test',
             'redirect_uri' => 'https://blocked.example.test/callback',
             'status' => 'active',
-            'required_permissions' => [],
         ])
         ->assertForbidden();
 
@@ -608,7 +678,6 @@ test('operation logs show enriched fields and can be filtered by action', functi
     $admin = User::factory()->create();
     aucGrant($admin, $tenant, ['audit_logs.view']);
     $application = Application::factory()->create([
-        'tenant_id' => $tenant->id,
         'name' => '订单系统',
     ]);
 

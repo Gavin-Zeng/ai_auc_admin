@@ -67,7 +67,7 @@ class MenuController extends Controller
 
         return [
             'parent_id' => Menu::query()->where('tenant_id', $tenant?->id)->orderBy('sort_order')->get(['id', 'title'])->map(fn (Menu $menu) => ['value' => $menu->id, 'label' => $menu->title])->values(),
-            'application_id' => Application::query()->where('tenant_id', $tenant?->id)->orderBy('name')->get(['id', 'name'])->map(fn (Application $application) => ['value' => $application->id, 'label' => $application->name])->values(),
+            'application_id' => Application::query()->orderBy('name')->get(['id', 'name'])->map(fn (Application $application) => ['value' => $application->id, 'label' => $application->name])->values(),
             'required_permissions' => Permission::query()->where('status', 'active')->orderBy('code')->pluck('code')->values(),
         ];
     }
@@ -107,7 +107,6 @@ class MenuController extends Controller
 
         if (($data['application_id'] ?? null) !== null) {
             abort_unless(Application::query()
-                ->where('tenant_id', $tenant?->id)
                 ->whereKey($data['application_id'])
                 ->exists(), 403);
         }

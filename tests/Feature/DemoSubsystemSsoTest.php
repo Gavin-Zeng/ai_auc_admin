@@ -16,13 +16,11 @@ test('demo subsystem callback exchanges code and stores local session snapshot',
     aucGrant($user, $tenant, ['dashboard.view']);
 
     $application = Application::factory()->create([
-        'tenant_id' => $tenant->id,
-        'code' => 'auc-admin',
-        'client_id' => 'demo-client',
+        'client_id' => 'auc-admin',
         'client_secret' => 'secret',
         'redirect_uri' => 'http://localhost/demo-subsystem/sso/callback',
-        'required_permissions' => ['dashboard.view'],
     ]);
+    aucOpenApplication($tenant, $application, ['dashboard.view']);
 
     SsoAuthCode::query()->create([
         'tenant_id' => $tenant->id,
@@ -49,7 +47,7 @@ test('demo subsystem callback exchanges code and stores local session snapshot',
         ->assertSessionHas(DemoSubsystemSession::SessionKey);
 
     Http::assertSent(fn ($request) => $request->url() === route('sso.token')
-        && $request['client_id'] === 'demo-client'
+        && $request['client_id'] === 'auc-admin'
         && $request['client_secret'] === 'secret'
         && $request['code'] === 'demo-code'
         && $request['redirect_uri'] === $application->redirect_uri);

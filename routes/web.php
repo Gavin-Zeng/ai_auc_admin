@@ -43,6 +43,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::resource('menus', MenuController::class)->only(['index', 'store', 'update', 'destroy'])->middleware('can:menus.manage');
     Route::resource('applications', ApplicationController::class)->only(['index', 'show', 'store', 'update', 'destroy'])->middleware('can:applications.manage');
     Route::post('applications/{application}/rotate-secret', [ApplicationController::class, 'rotateSecret'])->middleware('can:applications.manage')->name('applications.rotate-secret');
+    Route::post('applications/{application}/tenant-applications', [ApplicationController::class, 'openForTenant'])->middleware('can:applications.manage')->name('applications.tenant-applications.store');
     Route::resource('audit-logs', AuditLogController::class)->only(['index'])->middleware('can:audit_logs.view');
     Route::get('diagnostics', DiagnosticsController::class)->middleware('can:diagnostics.view')->name('diagnostics.index');
 });

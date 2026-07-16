@@ -3,6 +3,7 @@
 use App\Models\Permission;
 use App\Models\Role;
 use App\Models\Tenant;
+use App\Models\TenantApplication;
 use App\Models\TenantUser;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -81,4 +82,16 @@ function aucGrant(User $user, Tenant $tenant, array $permissionCodes, bool $isOw
 
     $role->permissions()->sync($permissions->pluck('id')->all());
     $user->roles()->attach($role->id, ['tenant_id' => $tenant->id]);
+}
+
+function aucOpenApplication(Tenant $tenant, mixed $application, array $requiredPermissions = [], string $status = 'active'): void
+{
+    TenantApplication::query()->updateOrCreate([
+        'tenant_id' => $tenant->id,
+        'application_id' => $application->id,
+    ], [
+        'required_permissions' => $requiredPermissions,
+        'status' => $status,
+        'sort_order' => 0,
+    ]);
 }

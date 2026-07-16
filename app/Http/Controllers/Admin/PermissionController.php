@@ -7,7 +7,6 @@ use App\Http\Controllers\Controller;
 use App\Models\Application;
 use App\Models\Permission;
 use App\Support\PermissionVersion;
-use App\Support\TenantContext;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Http\Request;
 
@@ -42,11 +41,8 @@ class PermissionController extends Controller
 
     protected function resourceOptions(Request $request): array
     {
-        $tenant = app(TenantContext::class)->current();
-
         return [
             'application_id' => Application::query()
-                ->where('tenant_id', $tenant?->id)
                 ->orderBy('name')
                 ->get(['id', 'name'])
                 ->map(fn (Application $application) => [
@@ -73,11 +69,8 @@ class PermissionController extends Controller
     {
         $data['status'] ??= 'active';
 
-        $tenant = app(TenantContext::class)->current();
-
         if (($data['application_id'] ?? null) !== null) {
             abort_unless(Application::query()
-                ->where('tenant_id', $tenant?->id)
                 ->whereKey($data['application_id'])
                 ->exists(), 403);
         }

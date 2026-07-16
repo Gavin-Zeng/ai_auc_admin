@@ -85,6 +85,11 @@ class AuditLogController extends Controller
      */
     private function systemNames(Collection $logs): array
     {
+        $allSubjectIds = $logs
+            ->pluck('subject_id')
+            ->filter()
+            ->values()
+            ->all();
         $applicationIds = $logs
             ->filter(fn (AuditLog $log) => $this->matchesSubjectType($log, Application::class) && $log->subject_id !== null)
             ->pluck('subject_id')
@@ -99,7 +104,7 @@ class AuditLogController extends Controller
             ->all();
 
         $applications = Application::query()
-            ->whereIn('id', $applicationIds)
+            ->whereIn('id', array_values(array_unique([...$allSubjectIds, ...$applicationIds])))
             ->pluck('name', 'id');
         $menus = Menu::query()
             ->whereIn('id', $menuIds)
@@ -122,6 +127,8 @@ class AuditLogController extends Controller
                     $name = $menus->get($log->subject_id, '-');
                 } elseif ($this->matchesSubjectType($log, Permission::class)) {
                     $name = $permissions->get($log->subject_id, '-');
+                } elseif ($log->subject_id !== null) {
+                    $name = $applications->get($log->subject_id, '-');
                 }
 
                 return [$log->id => $name];
@@ -183,6 +190,7 @@ class AuditLogController extends Controller
             'application.created' => '创建系统',
             'application.updated' => '更新系统',
             'application.disabled' => '停用系统',
+            'tenant_application.opened' => '开通公司系统',
             'user.created' => '创建账号',
             'user.updated' => '更新账号',
             'user.disabled' => '停用账号',

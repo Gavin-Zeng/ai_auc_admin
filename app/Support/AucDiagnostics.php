@@ -7,6 +7,7 @@ use App\Models\Menu;
 use App\Models\Permission;
 use App\Models\Role;
 use App\Models\Tenant;
+use App\Models\TenantApplication;
 use App\Models\TenantUser;
 use App\Models\User;
 use Illuminate\Support\Collection;
@@ -49,9 +50,12 @@ class AucDiagnostics
     public function report(): array
     {
         $tenant = Tenant::query()->where('code', 'default')->first();
-        $application = $tenant === null ? null : Application::query()
+        $application = Application::query()
+            ->where('client_id', 'auc-admin')
+            ->first();
+        $tenantApplication = $tenant === null || $application === null ? null : TenantApplication::query()
             ->where('tenant_id', $tenant->id)
-            ->where('code', 'auc-admin')
+            ->where('application_id', $application->id)
             ->first();
         $adminRole = $tenant === null ? null : Role::query()
             ->where('tenant_id', $tenant->id)
@@ -65,6 +69,7 @@ class AucDiagnostics
             $this->check('role.admin', '默认 admin 角色存在', $adminRole !== null),
             $this->check('application.auc-admin', '默认应用 auc-admin 存在', $application !== null),
             $this->check('application.active', '默认应用处于启用状态', $application?->isActive() === true, $application?->status),
+            $this->check('application.opened', '默认公司已开通 auc-admin', $tenantApplication?->isActive() === true, $tenantApplication?->status),
             $this->check('application.secret', '默认应用密钥已配置', filled($application?->client_secret)),
             $this->check(
                 'application.redirect_uri',

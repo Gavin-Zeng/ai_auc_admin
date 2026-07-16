@@ -161,6 +161,12 @@ docs/auc-laravel-subsystem-integration.md
 
 该文档说明了 AUC 应用配置、SSO callback、token exchange、本地 session、权限快照和子系统鉴权建议。
 
+如果要新建“国内联运发行平台”这类 Laravel 13 + Inertia Vue 后台，并接入现有 AUC，专项接入文档见：
+
+```text
+docs/auc-mk-admin-integration.md
+```
+
 ## 常见问题
 
 ### 页面样式或前端修改没有生效

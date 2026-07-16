@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Head, Link, router, usePage } from '@inertiajs/vue3';
+import { Head, Link, router, useForm, usePage } from '@inertiajs/vue3';
 import {
     AppWindow,
     CheckCircle2,
@@ -13,23 +13,31 @@ import {
     UsersRound,
 } from 'lucide-vue-next';
 import { computed, ref } from 'vue';
+import { openForTenant } from '@/actions/App/Http/Controllers/Admin/ApplicationController';
 import { rotateSecret } from '@/routes/applications';
 import { index as applicationsIndex } from '@/routes/applications';
 import { index as menusIndex } from '@/routes/menus';
 import { index as permissionsIndex } from '@/routes/permissions';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import {
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+} from '@/components/ui/select';
 
 type Application = {
     id: number;
-    tenant_id: number;
-    code: string;
     name: string;
     client_id: string;
     base_url: string;
     redirect_uri: string;
     icon: string | null;
-    required_permissions: string[];
     status: string;
     secret_configured: boolean;
 };
@@ -78,6 +86,20 @@ type Check = {
     message: string;
 };
 
+type TenantApplication = {
+    id: number;
+    tenant_id: number;
+    tenant_name: string | null;
+    required_permissions: string[];
+    status: string;
+    sort_order: number;
+};
+
+type Option = {
+    value: number | string;
+    label: string;
+};
+
 const props = defineProps<{
     application: Application;
     tenant: Tenant;
@@ -88,33 +110,78 @@ const props = defineProps<{
         required_permissions: string[];
         roles: Role[];
     };
+    tenantApplications: TenantApplication[];
+    tenantOptions: Option[];
+    permissionOptions: Option[];
+    canManageTenantApplications: boolean;
     checks: Check[];
 }>();
 
-const tabs = [
+const allTabs = [
     { key: 'overview', label: '基本信息', icon: AppWindow },
     { key: 'sso', label: 'SSO 配置', icon: ServerCog },
     { key: 'permissions', label: '权限点', icon: ShieldCheck },
     { key: 'menus', label: '菜单树', icon: ListTree },
     { key: 'authorization', label: '系统授权', icon: UsersRound },
+    { key: 'companies', label: '公司开通', icon: UsersRound },
     { key: 'checks', label: '接入检查', icon: CheckCircle2 },
 ] as const;
 
-type TabKey = (typeof tabs)[number]['key'];
+type TabKey = (typeof allTabs)[number]['key'];
 
 const activeTab = ref<TabKey>('overview');
 const page = usePage();
+const tabs = computed(() =>
+    allTabs.filter(
+        (tab) => tab.key !== 'companies' || props.canManageTenantApplications,
+    ),
+);
 const rotatedSecret = computed(() => page.props.secret as string | undefined);
 const passedChecks = computed(
     () => props.checks.filter((check) => check.passed).length,
 );
+const tenantApplicationForm = useForm({
+    tenant_id: '',
+    required_permissions: [] as string[],
+    status: 'active',
+    sort_order: 0,
+});
 
 function statusLabel(status: string): string {
     return status === 'active' ? '启用' : '停用';
 }
 
 function rotateApplicationSecret(): void {
-    router.post(rotateSecret(props.application.id).url, {}, { preserveScroll: true });
+    router.post(
+        rotateSecret(props.application.id).url,
+        {},
+        { preserveScroll: true },
+    );
+}
+
+function toggleTenantPermission(permission: string): void {
+    const permissions = tenantApplicationForm.required_permissions.map(String);
+
+    tenantApplicationForm.required_permissions = permissions.includes(
+        permission,
+    )
+        ? permissions.filter((item) => item !== permission)
+        : [...permissions, permission];
+}
+
+function editTenantApplication(tenantApplication: TenantApplication): void {
+    tenantApplicationForm.tenant_id = String(tenantApplication.tenant_id);
+    tenantApplicationForm.required_permissions = [
+        ...tenantApplication.required_permissions,
+    ];
+    tenantApplicationForm.status = tenantApplication.status;
+    tenantApplicationForm.sort_order = tenantApplication.sort_order;
+}
+
+function submitTenantApplication(): void {
+    tenantApplicationForm.post(openForTenant(props.application.id).url, {
+        preserveScroll: true,
+    });
 }
 </script>
 
@@ -139,7 +206,7 @@ function rotateApplicationSecret(): void {
                         </Badge>
                     </div>
                     <p class="text-sm text-muted-foreground">
-                        {{ tenant.name }} / {{ application.code }}
+                        {{ tenant.name }} / {{ application.client_id }}
                     </p>
                 </div>
             </div>
@@ -150,7 +217,10 @@ function rotateApplicationSecret(): void {
                 <Button variant="secondary" as-child>
                     <Link :href="menusIndex().url">维护菜单</Link>
                 </Button>
-                <Button @click="rotateApplicationSecret">
+                <Button
+                    v-if="canManageTenantApplications"
+                    @click="rotateApplicationSecret"
+                >
                     <KeyRound class="size-4" />
                     轮换密钥
                 </Button>
@@ -162,7 +232,7 @@ function rotateApplicationSecret(): void {
             class="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900 dark:border-amber-900/60 dark:bg-amber-950/40 dark:text-amber-100"
         >
             <div class="font-medium">新的系统密钥只显示一次</div>
-            <div class="mt-2 break-all font-mono">{{ rotatedSecret }}</div>
+            <div class="mt-2 font-mono break-all">{{ rotatedSecret }}</div>
         </div>
 
         <div class="grid gap-3 md:grid-cols-4">
@@ -179,9 +249,9 @@ function rotateApplicationSecret(): void {
                 </div>
             </div>
             <div class="rounded-lg border border-sidebar-border/70 p-4">
-                <div class="text-sm text-muted-foreground">访问权限</div>
+                <div class="text-sm text-muted-foreground">已开通公司</div>
                 <div class="mt-2 text-2xl font-semibold">
-                    {{ authorization.required_permissions.length }}
+                    {{ tenantApplications.length }}
                 </div>
             </div>
             <div class="rounded-lg border border-sidebar-border/70 p-4">
@@ -218,8 +288,8 @@ function rotateApplicationSecret(): void {
                 <h2 class="font-medium">系统信息</h2>
                 <dl class="mt-4 grid gap-3 text-sm">
                     <div class="grid gap-1">
-                        <dt class="text-muted-foreground">系统编码</dt>
-                        <dd class="font-mono">{{ application.code }}</dd>
+                        <dt class="text-muted-foreground">客户端 ID</dt>
+                        <dd class="font-mono">{{ application.client_id }}</dd>
                     </div>
                     <div class="grid gap-1">
                         <dt class="text-muted-foreground">基础地址</dt>
@@ -227,7 +297,9 @@ function rotateApplicationSecret(): void {
                     </div>
                     <div class="grid gap-1">
                         <dt class="text-muted-foreground">回调地址</dt>
-                        <dd class="break-all">{{ application.redirect_uri }}</dd>
+                        <dd class="break-all">
+                            {{ application.redirect_uri }}
+                        </dd>
                     </div>
                 </dl>
             </div>
@@ -256,7 +328,7 @@ function rotateApplicationSecret(): void {
                 <div class="mt-4 grid gap-4 text-sm md:grid-cols-2">
                     <div>
                         <div class="text-muted-foreground">client_id</div>
-                        <div class="mt-1 break-all font-mono">
+                        <div class="mt-1 font-mono break-all">
                             {{ application.client_id }}
                         </div>
                     </div>
@@ -291,7 +363,9 @@ function rotateApplicationSecret(): void {
             >
                 <div class="flex flex-wrap items-center justify-between gap-2">
                     <div>
-                        <div class="font-mono text-sm">{{ permission.code }}</div>
+                        <div class="font-mono text-sm">
+                            {{ permission.code }}
+                        </div>
                         <div class="text-sm text-muted-foreground">
                             {{ permission.name }}
                         </div>
@@ -319,10 +393,14 @@ function rotateApplicationSecret(): void {
                     :key="menu.id"
                     class="rounded-lg border border-sidebar-border/70 p-4"
                 >
-                    <div class="flex flex-wrap items-center justify-between gap-2">
+                    <div
+                        class="flex flex-wrap items-center justify-between gap-2"
+                    >
                         <div>
                             <div class="font-medium">{{ menu.title }}</div>
-                            <div class="font-mono text-xs text-muted-foreground">
+                            <div
+                                class="font-mono text-xs text-muted-foreground"
+                            >
                                 {{ menu.code }} / {{ menu.href ?? '-' }}
                             </div>
                         </div>
@@ -352,7 +430,9 @@ function rotateApplicationSecret(): void {
                             class="rounded-md bg-muted/40 p-3"
                         >
                             <div class="font-medium">{{ child.title }}</div>
-                            <div class="font-mono text-xs text-muted-foreground">
+                            <div
+                                class="font-mono text-xs text-muted-foreground"
+                            >
                                 {{ child.code }} / {{ child.href ?? '-' }}
                             </div>
                         </div>
@@ -407,6 +487,154 @@ function rotateApplicationSecret(): void {
                     </div>
                 </div>
             </div>
+        </section>
+
+        <section
+            v-else-if="activeTab === 'companies'"
+            class="grid gap-4 lg:grid-cols-[minmax(0,1fr)_360px]"
+        >
+            <div class="rounded-lg border border-sidebar-border/70">
+                <div class="border-b border-sidebar-border/70 px-4 py-3">
+                    <h2 class="font-medium">已开通公司</h2>
+                </div>
+                <div class="divide-y divide-sidebar-border/70">
+                    <div
+                        v-for="tenantApplication in tenantApplications"
+                        :key="tenantApplication.id"
+                        class="flex flex-wrap items-center justify-between gap-3 px-4 py-3 text-sm"
+                    >
+                        <div>
+                            <div class="font-medium">
+                                {{ tenantApplication.tenant_name ?? '-' }}
+                            </div>
+                            <div class="mt-1 flex flex-wrap gap-1">
+                                <Badge
+                                    v-for="permission in tenantApplication.required_permissions"
+                                    :key="permission"
+                                    variant="outline"
+                                >
+                                    {{ permission }}
+                                </Badge>
+                                <span
+                                    v-if="
+                                        tenantApplication.required_permissions
+                                            .length === 0
+                                    "
+                                    class="text-xs text-muted-foreground"
+                                >
+                                    无入口权限限制
+                                </span>
+                            </div>
+                        </div>
+                        <div class="flex items-center gap-2">
+                            <Badge variant="secondary">
+                                {{ statusLabel(tenantApplication.status) }}
+                            </Badge>
+                            <Button
+                                type="button"
+                                variant="secondary"
+                                size="sm"
+                                @click="
+                                    editTenantApplication(tenantApplication)
+                                "
+                            >
+                                编辑
+                            </Button>
+                        </div>
+                    </div>
+                    <div
+                        v-if="tenantApplications.length === 0"
+                        class="px-4 py-8 text-center text-sm text-muted-foreground"
+                    >
+                        当前系统还没有开通给任何公司。
+                    </div>
+                </div>
+            </div>
+
+            <form
+                class="grid gap-3 rounded-lg border border-sidebar-border/70 p-4"
+                @submit.prevent="submitTenantApplication"
+            >
+                <h2 class="font-medium">开通配置</h2>
+                <div class="grid gap-1.5">
+                    <Label for="tenant_id">公司</Label>
+                    <Select v-model="tenantApplicationForm.tenant_id">
+                        <SelectTrigger>
+                            <SelectValue placeholder="选择公司" />
+                        </SelectTrigger>
+                        <SelectContent>
+                            <SelectItem
+                                v-for="option in tenantOptions"
+                                :key="option.value"
+                                :value="String(option.value)"
+                            >
+                                {{ option.label }}
+                            </SelectItem>
+                        </SelectContent>
+                    </Select>
+                    <div
+                        v-if="tenantApplicationForm.errors.tenant_id"
+                        class="text-sm text-red-600"
+                    >
+                        {{ tenantApplicationForm.errors.tenant_id }}
+                    </div>
+                </div>
+
+                <div class="grid gap-1.5">
+                    <Label for="status">状态</Label>
+                    <Select v-model="tenantApplicationForm.status">
+                        <SelectTrigger>
+                            <SelectValue placeholder="状态" />
+                        </SelectTrigger>
+                        <SelectContent>
+                            <SelectItem value="active">启用</SelectItem>
+                            <SelectItem value="disabled">停用</SelectItem>
+                        </SelectContent>
+                    </Select>
+                </div>
+
+                <div class="grid gap-1.5">
+                    <Label for="sort_order">排序</Label>
+                    <Input
+                        id="sort_order"
+                        v-model="tenantApplicationForm.sort_order"
+                        type="number"
+                        min="0"
+                    />
+                </div>
+
+                <div class="grid gap-1.5">
+                    <Label>入口权限</Label>
+                    <div
+                        class="max-h-44 space-y-2 overflow-y-auto rounded-md border border-sidebar-border/70 p-2"
+                    >
+                        <label
+                            v-for="option in permissionOptions"
+                            :key="option.value"
+                            class="flex items-center gap-2 text-sm"
+                        >
+                            <Checkbox
+                                :model-value="
+                                    tenantApplicationForm.required_permissions
+                                        .map(String)
+                                        .includes(String(option.value))
+                                "
+                                @update:model-value="
+                                    toggleTenantPermission(String(option.value))
+                                "
+                            />
+                            <span>{{ option.label }}</span>
+                        </label>
+                    </div>
+                </div>
+
+                <Button
+                    type="submit"
+                    :disabled="tenantApplicationForm.processing"
+                >
+                    保存开通配置
+                </Button>
+            </form>
         </section>
 
         <section v-else class="grid gap-3">

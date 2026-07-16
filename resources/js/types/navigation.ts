@@ -24,7 +24,7 @@ export type AucMenuItem = {
 
 export type AucApplication = {
     id: number;
-    code: string;
+    client_id: string;
     name: string;
     base_url: string;
     icon: string | null;

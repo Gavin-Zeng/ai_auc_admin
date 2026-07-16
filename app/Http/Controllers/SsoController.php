@@ -42,11 +42,12 @@ class SsoController extends Controller
         }
 
         $application = Application::query()
-            ->where('tenant_id', $tenant->id)
             ->where('client_id', $validated['client_id'])
             ->first();
 
-        if ($application === null || ! $application->isActive()) {
+        $tenantApplication = $application === null ? null : $authorization->tenantApplication($tenant, $application);
+
+        if ($application === null || ! $application->isActive() || $tenantApplication === null || ! $tenantApplication->isActive()) {
             $auditLogger->log($request, 'sso.application_unavailable', $application, $tenant, [
                 'client_id' => $validated['client_id'],
             ]);
@@ -109,7 +110,7 @@ class SsoController extends Controller
         }
 
         if (! Hash::check($validated['client_secret'], $application->client_secret)) {
-            $auditLogger->log($request, 'sso.token_secret_invalid', $application, $application->tenant, [
+            $auditLogger->log($request, 'sso.token_secret_invalid', $application, metadata: [
                 'client_id' => $validated['client_id'],
             ]);
 
@@ -117,13 +118,13 @@ class SsoController extends Controller
         }
 
         if (! $application->isActive()) {
-            $auditLogger->log($request, 'sso.token_application_disabled', $application, $application->tenant);
+            $auditLogger->log($request, 'sso.token_application_disabled', $application);
 
             return $this->tokenError('application_disabled', '应用已停用。', HttpResponse::HTTP_FORBIDDEN);
         }
 
         if ($validated['redirect_uri'] !== $application->redirect_uri) {
-            $auditLogger->log($request, 'sso.token_redirect_uri_rejected', $application, $application->tenant, [
+            $auditLogger->log($request, 'sso.token_redirect_uri_rejected', $application, metadata: [
                 'requested_redirect_uri' => $validated['redirect_uri'],
             ]);
 
@@ -137,7 +138,7 @@ class SsoController extends Controller
             ->first();
 
         if ($code === null || $code->redirect_uri !== $validated['redirect_uri']) {
-            $auditLogger->log($request, 'sso.token_code_invalid', $application, $application->tenant, [
+            $auditLogger->log($request, 'sso.token_code_invalid', $application, metadata: [
                 'code' => $validated['code'],
             ]);
 
@@ -169,6 +170,17 @@ class SsoController extends Controller
             ]);
 
             return $this->tokenError('tenant_disabled', '租户不可用。', HttpResponse::HTTP_FORBIDDEN);
+        }
+
+        $tenantApplication = $authorization->tenantApplication($code->tenant, $application);
+
+        if ($tenantApplication === null || ! $tenantApplication->isActive()) {
+            $auditLogger->log($request, 'sso.token_application_not_opened', $application, $code->tenant, [
+                'code_id' => $code->id,
+                'user_id' => $code->user_id,
+            ]);
+
+            return $this->tokenError('application_disabled', '当前公司未开通该应用。', HttpResponse::HTTP_FORBIDDEN);
         }
 
         $code->forceFill(['used_at' => now()])->save();

@@ -6,6 +6,7 @@ use App\Models\Application;
 use App\Models\Menu;
 use App\Models\Permission;
 use App\Models\Tenant;
+use App\Models\TenantApplication;
 use App\Models\TenantUser;
 use App\Models\User;
 use Illuminate\Support\Collection;
@@ -163,27 +164,30 @@ class AucAuthorization
     }
 
     /**
-     * @return list<array{id: int, code: string, name: string, base_url: string, icon: string|null, authorize_url: string}>
+     * @return list<array{id: int, client_id: string, name: string, base_url: string, icon: string|null, authorize_url: string}>
      */
     public function applications(User $user, Tenant $tenant): array
     {
         $permissions = $this->permissions($user, $tenant);
 
-        return Application::query()
+        return TenantApplication::query()
+            ->with('application')
             ->where('tenant_id', $tenant->id)
             ->where('status', 'active')
-            ->orderBy('name')
+            ->whereHas('application', fn ($query) => $query->where('status', 'active'))
+            ->orderBy('sort_order')
             ->get()
-            ->filter(fn (Application $application) => $this->hasRequiredPermissions($user, $permissions, $application->required_permissions ?? []))
-            ->map(fn (Application $application) => [
-                'id' => $application->id,
-                'code' => $application->code,
-                'name' => $application->name,
-                'base_url' => $application->base_url,
-                'icon' => $application->icon,
+            ->sortBy(fn (TenantApplication $tenantApplication): string => $tenantApplication->application->name)
+            ->filter(fn (TenantApplication $tenantApplication) => $this->hasRequiredPermissions($user, $permissions, $tenantApplication->required_permissions ?? []))
+            ->map(fn (TenantApplication $tenantApplication) => [
+                'id' => $tenantApplication->application->id,
+                'client_id' => $tenantApplication->application->client_id,
+                'name' => $tenantApplication->application->name,
+                'base_url' => $tenantApplication->application->base_url,
+                'icon' => $tenantApplication->application->icon,
                 'authorize_url' => route('sso.authorize', [
-                    'client_id' => $application->client_id,
-                    'redirect_uri' => $application->redirect_uri,
+                    'client_id' => $tenantApplication->application->client_id,
+                    'redirect_uri' => $tenantApplication->application->redirect_uri,
                     'tenant_id' => $tenant->id,
                 ]),
             ])
@@ -193,15 +197,25 @@ class AucAuthorization
 
     public function canAccessApplication(User $user, Tenant $tenant, Application $application): bool
     {
-        if ((int) $application->tenant_id !== (int) $tenant->id || ! $application->isActive()) {
+        $tenantApplication = $this->tenantApplication($tenant, $application);
+
+        if ($tenantApplication === null || ! $application->isActive() || ! $tenantApplication->isActive()) {
             return false;
         }
 
         return $this->hasRequiredPermissions(
             $user,
             $this->permissions($user, $tenant),
-            $application->required_permissions ?? [],
+            $tenantApplication->required_permissions ?? [],
         );
+    }
+
+    public function tenantApplication(Tenant $tenant, Application $application): ?TenantApplication
+    {
+        return TenantApplication::query()
+            ->where('tenant_id', $tenant->id)
+            ->where('application_id', $application->id)
+            ->first();
     }
 
     private function permissionVersion(User $user, Tenant $tenant): int

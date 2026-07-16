@@ -7,6 +7,7 @@ use App\Models\Menu;
 use App\Models\Permission;
 use App\Models\Role;
 use App\Models\Tenant;
+use App\Models\TenantApplication;
 use App\Models\TenantUser;
 use App\Models\User;
 use Illuminate\Database\Seeder;
@@ -73,17 +74,23 @@ class DatabaseSeeder extends Seeder
         $role->permissions()->syncWithoutDetaching($permissions->pluck('id')->all());
         $user->roles()->syncWithoutDetaching([$role->id => ['tenant_id' => $tenant->id]]);
 
-        Application::query()->firstOrCreate([
-            'tenant_id' => $tenant->id,
-            'code' => 'auc-admin',
+        $application = Application::query()->firstOrCreate([
+            'client_id' => 'auc-admin',
         ], [
             'name' => 'AUC 后台',
-            'client_id' => 'auc-admin',
             'client_secret' => 'secret',
             'base_url' => config('app.url'),
             'redirect_uri' => config('app.url').'/demo-subsystem/sso/callback',
+            'status' => 'active',
+        ]);
+
+        TenantApplication::query()->firstOrCreate([
+            'tenant_id' => $tenant->id,
+            'application_id' => $application->id,
+        ], [
             'required_permissions' => ['dashboard.view'],
             'status' => 'active',
+            'sort_order' => 0,
         ]);
 
         foreach ($this->menus($tenant->id) as $menu) {

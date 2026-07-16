@@ -23,7 +23,7 @@ class DemoSubsystemController extends Controller
         ]);
 
         $application = Application::query()
-            ->where('code', 'auc-admin')
+            ->where('client_id', 'auc-admin')
             ->firstOrFail();
 
         $response = Http::asJson()
