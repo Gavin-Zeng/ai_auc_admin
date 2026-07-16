@@ -46,10 +46,11 @@ trait ManagesResources
 
     public function store(Request $request, TenantContext $tenantContext, AuditLogger $auditLogger, PermissionVersion $permissionVersion): RedirectResponse
     {
-        $tenant = $tenantContext->current() ?? $tenantContext->resolveForRequest($request);
-        abort_if($tenant === null && ! $request->user()?->isPlatformAdmin(), 403);
+        $currentTenant = $tenantContext->current() ?? $tenantContext->resolveForRequest($request);
+        abort_if($currentTenant === null && ! $request->user()?->isPlatformAdmin(), 403);
 
         $data = $this->validated($request);
+        $tenant = $this->tenantForWrite($request, $currentTenant);
         $model = $this->resourceModel()::query()->create($this->prepareData($request, $data));
 
         $this->afterWrite($request, $model, $tenant, $permissionVersion);
@@ -60,12 +61,13 @@ trait ManagesResources
 
     public function update(Request $request, TenantContext $tenantContext, AuditLogger $auditLogger, PermissionVersion $permissionVersion): RedirectResponse
     {
-        $tenant = $tenantContext->current() ?? $tenantContext->resolveForRequest($request);
-        abort_if($tenant === null && ! $request->user()?->isPlatformAdmin(), 403);
+        $currentTenant = $tenantContext->current() ?? $tenantContext->resolveForRequest($request);
+        abort_if($currentTenant === null && ! $request->user()?->isPlatformAdmin(), 403);
         $model = $this->routeModel($request);
-        $this->authorizeResourceModel($model, $tenant);
+        $this->authorizeResourceModel($model, $currentTenant);
 
         $data = $this->validated($request, $model);
+        $tenant = $this->tenantForWrite($request, $currentTenant, $model);
         $model->forceFill($this->prepareData($request, $data, $model))->save();
 
         $this->afterWrite($request, $model, $tenant, $permissionVersion);
@@ -148,6 +150,11 @@ trait ManagesResources
     protected function prepareData(Request $request, array $data, ?Model $model = null): array
     {
         return $data;
+    }
+
+    protected function tenantForWrite(Request $request, mixed $currentTenant, ?Model $model = null): mixed
+    {
+        return $currentTenant;
     }
 
     protected function authorizeResourceModel(Model $model, mixed $tenant): void

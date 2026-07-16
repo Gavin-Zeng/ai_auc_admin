@@ -29,7 +29,7 @@ class SsoController extends Controller
         ]);
 
         $user = $request->user();
-        $tenant = $tenantContext->current() ?? $tenantContext->resolveForRequest($request);
+        $tenant = $tenantContext->resolveForSso($request);
 
         if ($user === null || $tenant === null || ! $tenant->isActive()) {
             $auditLogger->log($request, 'sso.tenant_unavailable', tenant: $tenant, metadata: [

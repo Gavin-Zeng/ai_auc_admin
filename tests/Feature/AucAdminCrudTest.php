@@ -9,6 +9,7 @@ use App\Models\Tenant;
 use App\Models\TenantUser;
 use App\Models\User;
 use App\Support\AuditLogger;
+use App\Support\TenantContext;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 
@@ -166,6 +167,7 @@ test('platform admin can create account for selected company with active members
     $role = Role::factory()->create(['tenant_id' => $otherTenant->id]);
 
     $this->actingAs($admin)
+        ->withSession([TenantContext::SessionKey => $tenant->id])
         ->post(route('users.store', ['tenant_id' => $otherTenant->id]), [
             'account' => 'NewAccount',
             'name' => 'New Account',
@@ -175,7 +177,8 @@ test('platform admin can create account for selected company with active members
             'is_owner' => false,
             'role_ids' => [$role->id],
         ])
-        ->assertRedirect();
+        ->assertRedirect()
+        ->assertSessionHas(TenantContext::SessionKey, $tenant->id);
 
     $user = User::query()->where('account', 'NewAccount')->firstOrFail();
 
@@ -344,13 +347,15 @@ test('platform admin can create role for selected company and company admin cann
     $permission = Permission::factory()->create(['status' => 'active']);
 
     $this->actingAs($platformAdmin)
+        ->withSession([TenantContext::SessionKey => $tenant->id])
         ->post(route('roles.store', ['tenant_id' => $otherTenant->id]), [
             'tenant_id' => $otherTenant->id,
             'code' => 'planner',
             'name' => 'Planner',
             'permission_ids' => [$permission->id],
         ])
-        ->assertRedirect();
+        ->assertRedirect()
+        ->assertSessionHas(TenantContext::SessionKey, $tenant->id);
 
     expect(Role::query()->where('tenant_id', $otherTenant->id)->where('code', 'planner')->exists())->toBeTrue();
 
@@ -448,18 +453,20 @@ test('platform admin can open one global system for multiple companies', functio
     ]);
 
     $this->actingAs($admin)
+        ->withSession([TenantContext::SessionKey => $firstTenant->id])
         ->post(route('applications.tenant-applications.store', $application), [
-            'tenant_id' => $firstTenant->id,
+            'target_tenant_id' => $firstTenant->id,
             'required_permissions' => ['support.access'],
             'status' => 'active',
         ])
         ->assertRedirect();
 
     $this->post(route('applications.tenant-applications.store', $application), [
-        'tenant_id' => $secondTenant->id,
+        'target_tenant_id' => $secondTenant->id,
         'required_permissions' => [],
         'status' => 'active',
-    ])->assertRedirect();
+    ])->assertRedirect()
+        ->assertSessionHas(TenantContext::SessionKey, $firstTenant->id);
 
     expect($application->tenantApplications()->count())->toBe(2);
 
@@ -542,7 +549,7 @@ test('application secret can be rotated and audited', function () {
     $this->actingAs($admin)
         ->post(route('applications.rotate-secret', $application))
         ->assertRedirect()
-        ->assertSessionHas('secret');
+        ->assertInertiaFlash('secret');
 
     expect(Hash::check('old-secret', $application->refresh()->client_secret))->toBeFalse();
     expect(AuditLog::query()->where('action', 'application.secret_rotated')->exists())->toBeTrue();
@@ -773,7 +780,10 @@ test('company admin can only see current company operation logs', function () {
             ->where('items.data.0.operation_action', '更新公司'));
 
     $this->get(route('audit-logs.index', ['tenant_id' => $otherTenant->id]))
-        ->assertForbidden();
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page
+            ->has('items.data', 1)
+            ->where('items.data.0.company_name', 'A 公司'));
 });
 
 test('audit logger stores sanitized request parameters', function () {

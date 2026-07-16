@@ -2,6 +2,7 @@
 
 namespace App\Http\Middleware;
 
+use App\Models\Tenant;
 use App\Support\AucAuthorization;
 use App\Support\TenantContext;
 use Illuminate\Http\Request;
@@ -54,7 +55,9 @@ class HandleInertiaRequests extends Middleware
                     'is_platform_admin' => $user?->isPlatformAdmin() ?? false,
                     'is_company_owner' => $user !== null && $tenant !== null && $user->isCompanyOwner($tenant),
                 ],
-                'tenants' => fn () => $user === null ? [] : $user->tenants()
+                'tenants' => fn () => $user === null ? [] : ($user->isPlatformAdmin()
+                    ? Tenant::query()
+                    : $user->tenants())
                     ->orderBy('name')
                     ->get(['auc_tenants.id', 'auc_tenants.code', 'auc_tenants.name', 'auc_tenants.status']),
             ],

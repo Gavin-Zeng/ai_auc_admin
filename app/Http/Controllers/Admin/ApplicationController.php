@@ -172,7 +172,9 @@ class ApplicationController extends Controller
         $application->forceFill(['client_secret' => $secret])->save();
         $auditLogger->log($request, 'application.secret_rotated', $application, $tenant);
 
-        return back()->with('secret', $secret);
+        Inertia::flash('secret', $secret);
+
+        return back();
     }
 
     public function openForTenant(Request $request, Application $application, AuditLogger $auditLogger, PermissionVersion $permissionVersion): RedirectResponse
@@ -180,7 +182,7 @@ class ApplicationController extends Controller
         abort_unless($request->user()?->isPlatformAdmin(), 403);
 
         $data = $request->validate([
-            'tenant_id' => ['required', 'integer', 'exists:auc_tenants,id'],
+            'target_tenant_id' => ['required', 'integer', 'exists:auc_tenants,id'],
             'required_permissions' => ['nullable', 'array'],
             'required_permissions.*' => ['string', 'exists:auc_permissions,code'],
             'status' => ['nullable', 'in:active,disabled'],
@@ -188,7 +190,7 @@ class ApplicationController extends Controller
         ]);
 
         $tenantApplication = TenantApplication::query()->updateOrCreate([
-            'tenant_id' => $data['tenant_id'],
+            'tenant_id' => $data['target_tenant_id'],
             'application_id' => $application->id,
         ], [
             'required_permissions' => $data['required_permissions'] ?? [],

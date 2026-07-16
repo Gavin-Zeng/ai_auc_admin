@@ -11,8 +11,26 @@ export type User = {
     [key: string]: unknown;
 };
 
+export type Tenant = {
+    id: number;
+    code: string;
+    name: string;
+    status: string;
+};
+
 export type Auth = {
     user: User;
+    tenant: Tenant | null;
+    tenants: Tenant[];
+    membership: {
+        status: string;
+        is_owner: boolean;
+        permission_version: number;
+    } | null;
+    identity: {
+        is_platform_admin: boolean;
+        is_company_owner: boolean;
+    };
 };
 
 export type TwoFactorConfigContent = {

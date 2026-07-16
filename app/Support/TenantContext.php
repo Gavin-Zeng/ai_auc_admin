@@ -31,8 +31,7 @@ class TenantContext
             return null;
         }
 
-        $tenant = $this->resolveRequestedTenant($request, $user)
-            ?? $this->resolveSessionTenant($request, $user)
+        $tenant = $this->resolveSessionTenant($request, $user)
             ?? $this->resolveFirstTenant($user);
 
         $this->set($tenant);
@@ -42,6 +41,19 @@ class TenantContext
         }
 
         return $tenant;
+    }
+
+    public function resolveForSso(Request $request): ?Tenant
+    {
+        $user = $request->user();
+
+        if (! $user instanceof User) {
+            return null;
+        }
+
+        return $this->resolveRequestedTenant($request, $user)
+            ?? $this->current()
+            ?? $this->resolveForRequest($request);
     }
 
     public function membership(User $user, Tenant $tenant): ?TenantUser

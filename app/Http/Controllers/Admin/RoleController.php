@@ -115,6 +115,15 @@ class RoleController extends Controller
         return $data;
     }
 
+    protected function tenantForWrite(Request $request, mixed $currentTenant, ?Model $model = null): Tenant
+    {
+        if ($model === null && $request->user()?->isPlatformAdmin()) {
+            return Tenant::query()->findOrFail($request->integer('tenant_id'));
+        }
+
+        return $currentTenant;
+    }
+
     /**
      * @return list<mixed>
      */
@@ -127,6 +136,8 @@ class RoleController extends Controller
         if ($request->user()?->isPlatformAdmin()) {
             return ['required', 'integer', Rule::exists('auc_tenants', 'id')];
         }
+
+        abort_if($request->has('tenant_id'), 403);
 
         return ['prohibited'];
     }

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Head, Link, router, useForm, usePage } from '@inertiajs/vue3';
+import { Head, Link, router, useForm } from '@inertiajs/vue3';
 import {
     AppWindow,
     CheckCircle2,
@@ -12,12 +12,8 @@ import {
     ShieldCheck,
     UsersRound,
 } from 'lucide-vue-next';
-import { computed, ref } from 'vue';
+import { computed, onBeforeUnmount, ref } from 'vue';
 import { openForTenant } from '@/actions/App/Http/Controllers/Admin/ApplicationController';
-import { rotateSecret } from '@/routes/applications';
-import { index as applicationsIndex } from '@/routes/applications';
-import { index as menusIndex } from '@/routes/menus';
-import { index as permissionsIndex } from '@/routes/permissions';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -30,6 +26,10 @@ import {
     SelectTrigger,
     SelectValue,
 } from '@/components/ui/select';
+import { index as applicationsIndex } from '@/routes/applications';
+import { rotateSecret } from '@/routes/applications';
+import { index as menusIndex } from '@/routes/menus';
+import { index as permissionsIndex } from '@/routes/permissions';
 
 type Application = {
     id: number;
@@ -130,18 +130,26 @@ const allTabs = [
 type TabKey = (typeof allTabs)[number]['key'];
 
 const activeTab = ref<TabKey>('overview');
-const page = usePage();
 const tabs = computed(() =>
     allTabs.filter(
         (tab) => tab.key !== 'companies' || props.canManageTenantApplications,
     ),
 );
-const rotatedSecret = computed(() => page.props.secret as string | undefined);
+const rotatedSecret = ref<string>();
+const removeFlashListener = router.on('flash', (event) => {
+    const secret = (event as CustomEvent).detail?.flash?.secret;
+
+    if (typeof secret === 'string' && secret !== '') {
+        rotatedSecret.value = secret;
+    }
+});
+
+onBeforeUnmount(removeFlashListener);
 const passedChecks = computed(
     () => props.checks.filter((check) => check.passed).length,
 );
 const tenantApplicationForm = useForm({
-    tenant_id: '',
+    target_tenant_id: '',
     required_permissions: [] as string[],
     status: 'active',
     sort_order: 0,
@@ -170,7 +178,9 @@ function toggleTenantPermission(permission: string): void {
 }
 
 function editTenantApplication(tenantApplication: TenantApplication): void {
-    tenantApplicationForm.tenant_id = String(tenantApplication.tenant_id);
+    tenantApplicationForm.target_tenant_id = String(
+        tenantApplication.tenant_id,
+    );
     tenantApplicationForm.required_permissions = [
         ...tenantApplication.required_permissions,
     ];
@@ -557,8 +567,8 @@ function submitTenantApplication(): void {
             >
                 <h2 class="font-medium">开通配置</h2>
                 <div class="grid gap-1.5">
-                    <Label for="tenant_id">公司</Label>
-                    <Select v-model="tenantApplicationForm.tenant_id">
+                    <Label for="target_tenant_id">公司</Label>
+                    <Select v-model="tenantApplicationForm.target_tenant_id">
                         <SelectTrigger>
                             <SelectValue placeholder="选择公司" />
                         </SelectTrigger>
@@ -573,10 +583,10 @@ function submitTenantApplication(): void {
                         </SelectContent>
                     </Select>
                     <div
-                        v-if="tenantApplicationForm.errors.tenant_id"
+                        v-if="tenantApplicationForm.errors.target_tenant_id"
                         class="text-sm text-red-600"
                     >
-                        {{ tenantApplicationForm.errors.tenant_id }}
+                        {{ tenantApplicationForm.errors.target_tenant_id }}
                     </div>
                 </div>
 

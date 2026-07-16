@@ -6,6 +6,7 @@ use App\Models\Role;
 use App\Models\Tenant;
 use App\Models\TenantUser;
 use App\Models\User;
+use App\Support\TenantContext;
 
 test('role permission changes take effect immediately', function () {
     $tenant = Tenant::factory()->create();
@@ -52,7 +53,20 @@ test('platform admins can switch across tenants', function () {
 
     $this->actingAs($admin)
         ->post(route('tenant.switch'), ['tenant_id' => $tenant->id])
-        ->assertRedirect();
+        ->assertRedirect(route('dashboard'))
+        ->assertSessionHas(TenantContext::SessionKey, $tenant->id);
+});
+
+test('business tenant parameters do not switch the current tenant', function () {
+    $currentTenant = Tenant::factory()->create();
+    $targetTenant = Tenant::factory()->create();
+    $admin = User::factory()->platformAdmin()->create();
+
+    $this->actingAs($admin)
+        ->withSession([TenantContext::SessionKey => $currentTenant->id])
+        ->get(route('users.index', ['tenant_id' => $targetTenant->id]))
+        ->assertOk()
+        ->assertSessionHas(TenantContext::SessionKey, $currentTenant->id);
 });
 
 test('company owners can manage their company but not platform company records', function () {

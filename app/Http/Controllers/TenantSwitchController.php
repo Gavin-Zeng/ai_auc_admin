@@ -21,6 +21,6 @@ class TenantSwitchController extends Controller
 
         $request->session()->put(TenantContext::SessionKey, $tenant->id);
 
-        return back();
+        return to_route('dashboard');
     }
 }

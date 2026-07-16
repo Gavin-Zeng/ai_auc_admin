@@ -6,6 +6,7 @@ use App\Models\Menu;
 use App\Models\SsoAuthCode;
 use App\Models\Tenant;
 use App\Models\User;
+use App\Support\TenantContext;
 
 test('authenticated users can visit the AUC workspace', function () {
     $tenant = Tenant::factory()->create();
@@ -324,4 +325,26 @@ test('tenant switch changes navigation and applications', function () {
     $this->getJson(route('api.navigation'))
         ->assertOk()
         ->assertJsonPath('applications.0.name', 'Second App');
+});
+
+test('sso tenant selection does not change the current admin tenant', function () {
+    $currentTenant = Tenant::factory()->create();
+    $ssoTenant = Tenant::factory()->create();
+    $admin = User::factory()->platformAdmin()->create();
+    $application = Application::factory()->create([
+        'redirect_uri' => 'https://client.test/callback',
+    ]);
+    aucOpenApplication($ssoTenant, $application);
+
+    $this->actingAs($admin)
+        ->withSession([TenantContext::SessionKey => $currentTenant->id])
+        ->get(route('sso.authorize', [
+            'client_id' => $application->client_id,
+            'redirect_uri' => $application->redirect_uri,
+            'tenant_id' => $ssoTenant->id,
+        ]))
+        ->assertRedirect()
+        ->assertSessionHas(TenantContext::SessionKey, $currentTenant->id);
+
+    expect(SsoAuthCode::query()->latest('id')->value('tenant_id'))->toBe($ssoTenant->id);
 });

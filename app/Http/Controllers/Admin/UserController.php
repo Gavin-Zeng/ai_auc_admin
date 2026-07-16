@@ -160,6 +160,15 @@ class UserController extends Controller
         return $data;
     }
 
+    protected function tenantForWrite(Request $request, mixed $currentTenant, ?Model $model = null): Tenant
+    {
+        if ($model === null && $request->user()?->isPlatformAdmin()) {
+            return Tenant::query()->findOrFail($request->integer('tenant_id'));
+        }
+
+        return $currentTenant;
+    }
+
     protected function afterWrite(Request $request, Model $model, mixed $tenant, PermissionVersion $permissionVersion): void
     {
         if ($request->isMethod('delete')) {
@@ -207,6 +216,8 @@ class UserController extends Controller
         }
 
         if (! $request->user()?->isPlatformAdmin()) {
+            abort_if($request->has('tenant_id'), 403);
+
             return ['prohibited'];
         }
 
