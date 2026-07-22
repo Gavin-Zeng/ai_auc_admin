@@ -55,7 +55,13 @@ class AppServiceProvider extends ServiceProvider
 
     protected function configureAuthorization(): void
     {
-        Gate::before(fn (User $user): ?bool => $user->isPlatformAdmin() ? true : null);
+        Gate::before(function (User $user, string $ability): ?bool {
+            if ($user->isPlatformAdmin()) {
+                return true;
+            }
+
+            return null;
+        });
 
         foreach ($this->aucPermissions() as $permission) {
             Gate::define($permission, function (User $user) use ($permission): bool {
@@ -65,8 +71,8 @@ class AppServiceProvider extends ServiceProvider
             });
         }
 
-        Gate::define('tenants.manage', fn (User $user): bool => $user->isPlatformAdmin());
-        Gate::define('diagnostics.view', fn (User $user): bool => $user->isPlatformAdmin());
+        Gate::define('tenants.manage', fn (User $user): bool => false);
+        Gate::define('diagnostics.view', fn (User $user): bool => false);
     }
 
     /**
@@ -75,15 +81,13 @@ class AppServiceProvider extends ServiceProvider
     private function aucPermissions(): array
     {
         return [
+            'platform.workspace',
             'dashboard.view',
             'tenants.manage',
             'users.manage',
             'roles.manage',
-            'permissions.manage',
             'menus.manage',
             'applications.manage',
-            'audit_logs.view',
-            'diagnostics.view',
         ];
     }
 }

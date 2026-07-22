@@ -1,11 +1,7 @@
 <script setup lang="ts">
-import { Head, Link, router, useForm, usePage } from '@inertiajs/vue3';
-import { Eye, KeyRound, Pencil, Plus, Search } from 'lucide-vue-next';
+import { Head, router, useForm, usePage } from '@inertiajs/vue3';
+import { KeyRound, Pencil, Plus, Search } from 'lucide-vue-next';
 import { computed, ref, watch } from 'vue';
-import {
-    show as showApplication,
-    store as storeApplication,
-} from '@/routes/applications';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -18,6 +14,7 @@ import {
     SelectTrigger,
     SelectValue,
 } from '@/components/ui/select';
+import { store as storeApplication } from '@/routes/applications';
 
 type FieldOption =
     | string
@@ -33,6 +30,7 @@ type FieldConfig = {
     description?: string;
     type:
         | 'text'
+        | 'password'
         | 'number'
         | 'select'
         | 'textarea'
@@ -45,6 +43,7 @@ type FieldConfig = {
     updateOnly?: boolean;
     span?: 1 | 2;
     group?: string;
+    platformOnly?: boolean;
 };
 
 type ResourceConfig = {
@@ -68,18 +67,23 @@ type PaginatedItems = {
 const props = defineProps<{
     resource: ResourceConfig;
     items: PaginatedItems;
-    filters: { search?: string };
+    filters: { search?: string; company_id?: number | string | null };
     options: Record<string, FieldOption[]>;
 }>();
 
 const editing = ref<Record<string, any> | null>(null);
 const showForm = ref(false);
 const search = ref(props.filters.search ?? '');
+const companyId = ref(
+    props.filters.company_id ? String(props.filters.company_id) : 'all',
+);
 const page = usePage();
 const rotatedSecret = computed(() => page.props.secret as string | undefined);
 const visibleFields = computed(() =>
-    props.resource.fields.filter((field) =>
-        editing.value ? !field.createOnly : !field.updateOnly,
+    props.resource.fields.filter(
+        (field) =>
+            !(field.platformOnly && !page.props.auth.identity?.is_platform_admin) &&
+            (editing.value ? !field.createOnly : !field.updateOnly),
     ),
 );
 const formPanelClass = computed(() => 'max-w-4xl');
@@ -88,13 +92,13 @@ const blankValues = computed(() =>
     Object.fromEntries(
         props.resource.fields.map((field) => [
             field.name,
-            field.default !== undefined && field.default !== null
+            field.type === 'checkbox'
+                ? Boolean(field.default)
+                : field.default !== undefined && field.default !== null
                 ? String(field.default)
-                : field.type === 'checkbox'
-                ? false
                 : field.type === 'multiselect'
-                  ? []
-                  : '',
+                    ? []
+                    : '',
         ]),
     ),
 );
@@ -107,6 +111,7 @@ const displayLabels: Record<string, string> = {
     application_id: '所属系统',
     base_url: '基础地址',
     client_id: '客户端 ID',
+    applications_text: '已开通系统',
     code: '编码',
     company_name: '所属公司',
     company_names: '所属公司',
@@ -117,6 +122,7 @@ const displayLabels: Record<string, string> = {
     group: '分组',
     href: '链接',
     is_owner: '公司超管',
+    is_company_admin: '公司超管',
     ip_address: 'IP 地址',
     is_platform_admin: '平台超管',
     is_system: '系统内置',
@@ -127,6 +133,8 @@ const displayLabels: Record<string, string> = {
     operation_object: '操作对象',
     operator_name: '操作人',
     parent_id: '父级菜单',
+    parent_name: '父级菜单',
+    path: '菜单路径',
     redirect_uri: '回调地址',
     request_params: '请求参数',
     sort_order: '排序',
@@ -134,12 +142,19 @@ const displayLabels: Record<string, string> = {
     subject_id: '对象 ID',
     subject_type: '对象类型',
     system_name: '所属系统',
+    application_name: '所属系统',
+    role_name: '角色',
+    menus_text: '菜单权限',
+    users_count: '成员数量',
+    urls_count: '地址数量',
     title: '标题',
 };
 
 const valueLabels: Record<string, string> = {
     active: '启用',
     disabled: '停用',
+    '1': '启用',
+    '0': '停用',
 };
 
 function optionValue(option: FieldOption): string {
@@ -158,6 +173,23 @@ function fieldOptions(field: FieldConfig): FieldOption[] {
     if (
         props.resource.name === 'users' &&
         field.name === 'role_ids' &&
+        (form.tenant_id || form.target_tenant_id)
+    ) {
+        return (props.options[field.name] ?? []).filter((option) => {
+            if (typeof option === 'string') {
+                return true;
+            }
+
+            return (
+                String(option.tenant_id ?? '') ===
+                String(form.tenant_id || form.target_tenant_id)
+            );
+        });
+    }
+
+    if (
+        props.resource.name === 'menus' &&
+        field.name === 'parent_id' &&
         form.tenant_id
     ) {
         return (props.options[field.name] ?? []).filter((option) => {
@@ -170,13 +202,6 @@ function fieldOptions(field: FieldConfig): FieldOption[] {
     }
 
     return field.options ?? props.options[field.name] ?? [];
-}
-
-function generateSecret(): void {
-    form.client_secret =
-        Math.random().toString(36).slice(2) +
-        Math.random().toString(36).slice(2) +
-        Math.random().toString(36).slice(2);
 }
 
 function requestPayload(): Record<string, any> {
@@ -202,7 +227,13 @@ function startEdit(item: Record<string, any>) {
     for (const field of props.resource.fields) {
         const value = item[field.name] ?? values[field.name];
         values[field.name] =
-            field.type === 'select' && value !== '' ? String(value) : value;
+            field.type === 'select' && typeof value === 'boolean'
+                ? value
+                    ? '1'
+                    : '0'
+                : field.type === 'select' && value !== ''
+                  ? String(value)
+                  : value;
     }
 
     form.defaults(values);
@@ -211,12 +242,11 @@ function startEdit(item: Record<string, any>) {
     showForm.value = true;
 }
 
-function statusPayload(
-    item: Record<string, any>,
-    status: string,
-): Record<string, any> {
+function statusPayload(item: Record<string, any>, status: boolean): Record<string, any> {
     const fieldNames = new Set(
-        props.resource.fields.map((field) => field.name),
+        props.resource.fields
+            .filter((field) => !field.createOnly)
+            .map((field) => field.name),
     );
     const payload = Object.fromEntries(
         Object.entries(item).filter(([key]) => fieldNames.has(key)),
@@ -261,10 +291,10 @@ function toggleStatus(item: Record<string, any>) {
         return;
     }
 
-    const currentStatus = String(item.status ?? '');
-    const nextStatus = currentStatus === 'active' ? 'disabled' : 'active';
+    const currentStatus = Boolean(item.status);
+    const nextStatus = !currentStatus;
     const confirmed = confirm(
-        currentStatus === 'active'
+        currentStatus
             ? '确定停用该记录吗？'
             : '确定启用该记录吗？',
     );
@@ -273,21 +303,32 @@ function toggleStatus(item: Record<string, any>) {
         return;
     }
 
-    router.put(`/${props.resource.name}/${item.id}`, statusPayload(item, nextStatus), {
-        preserveScroll: true,
-    });
+    router.put(
+        `/${props.resource.name}/${item.id}`,
+        statusPayload(item, nextStatus),
+        {
+            preserveScroll: true,
+        },
+    );
 }
 
 function rotateSecret(item: Record<string, any>) {
-    router.post(`/${props.resource.name}/${item.id}/rotate-secret`, {}, {
-        preserveScroll: true,
-    });
+    router.post(
+        `/${props.resource.name}/${item.id}/rotate-secret`,
+        {},
+        {
+            preserveScroll: true,
+        },
+    );
 }
 
 function runSearch() {
     router.get(
         `/${props.resource.name}`,
-        { search: search.value },
+        {
+            search: search.value,
+            company_id: companyId.value === 'all' ? undefined : companyId.value,
+        },
         { preserveState: true, preserveScroll: true },
     );
 }
@@ -315,11 +356,11 @@ function fieldClass(field: FieldConfig): string {
 function statusBadgeClass(item: Record<string, any>, column: string): string {
     const value = String(item[column] ?? '');
 
-    if (value === 'active') {
+    if (value === 'true' || value === '1') {
         return 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900/60 dark:bg-emerald-950/40 dark:text-emerald-300';
     }
 
-    if (value === 'disabled') {
+    if (value === 'false' || value === '0') {
         return 'border-rose-200 bg-rose-50 text-rose-700 dark:border-rose-900/60 dark:bg-rose-950/40 dark:text-rose-300';
     }
 
@@ -339,7 +380,7 @@ function displayValue(item: Record<string, any>, column: string): string {
     const field = props.resource.fields.find((field) => field.name === column);
 
     if (
-        ['is_owner', 'is_platform_admin', 'is_system', 'is_visible'].includes(
+        ['is_owner', 'is_company_admin', 'is_platform_admin', 'is_system', 'is_visible'].includes(
             column,
         )
     ) {
@@ -354,6 +395,10 @@ function displayValue(item: Record<string, any>, column: string): string {
         if (option) {
             return optionLabel(option);
         }
+    }
+
+    if (column === 'status') {
+        return Boolean(value) ? '启用' : '停用';
     }
 
     if (typeof value === 'boolean') {
@@ -372,7 +417,7 @@ function displayValue(item: Record<string, any>, column: string): string {
 }
 
 watch(
-    () => form.tenant_id,
+    () => [form.tenant_id, form.target_tenant_id],
     () => {
         if (props.resource.name !== 'users') {
             return;
@@ -430,7 +475,7 @@ watch(
             菜单按父级菜单和排序字段组成树形结构。隐藏菜单只影响入口可见性，不替代服务端接口鉴权。
         </div>
 
-        <div class="flex items-center gap-2">
+        <div class="flex flex-wrap items-center gap-2">
             <div class="relative max-w-sm flex-1">
                 <Search
                     class="absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground"
@@ -442,6 +487,25 @@ watch(
                     @keyup.enter="runSearch"
                 />
             </div>
+            <Select
+                v-if="(options.company_id ?? []).length > 0"
+                v-model="companyId"
+                @update:model-value="runSearch"
+            >
+                <SelectTrigger class="w-48">
+                    <SelectValue placeholder="全部公司" />
+                </SelectTrigger>
+                <SelectContent>
+                    <SelectItem value="all">全部公司</SelectItem>
+                    <SelectItem
+                        v-for="option in options.company_id"
+                        :key="optionValue(option)"
+                        :value="optionValue(option)"
+                    >
+                        {{ optionLabel(option) }}
+                    </SelectItem>
+                </SelectContent>
+            </Select>
             <Button variant="secondary" @click="runSearch">搜索</Button>
         </div>
 
@@ -483,18 +547,18 @@ watch(
 
                 <div v-else-if="field.type === 'select'" class="space-y-1.5">
                     <Select v-model="form[field.name]">
-                    <SelectTrigger class="w-full">
-                        <SelectValue :placeholder="field.label" />
-                    </SelectTrigger>
-                    <SelectContent>
-                        <SelectItem
-                            v-for="option in fieldOptions(field)"
-                            :key="optionValue(option)"
-                            :value="optionValue(option)"
-                        >
-                            {{ optionLabel(option) }}
-                        </SelectItem>
-                    </SelectContent>
+                        <SelectTrigger class="w-full">
+                            <SelectValue :placeholder="field.label" />
+                        </SelectTrigger>
+                        <SelectContent>
+                            <SelectItem
+                                v-for="option in fieldOptions(field)"
+                                :key="optionValue(option)"
+                                :value="optionValue(option)"
+                            >
+                                {{ optionLabel(option) }}
+                            </SelectItem>
+                        </SelectContent>
                     </Select>
                     <div
                         v-if="field.description"
@@ -534,31 +598,7 @@ watch(
                 </div>
 
                 <div v-else class="space-y-1.5">
-                    <div
-                        v-if="
-                            resource.name === 'applications' &&
-                            field.name === 'client_secret' &&
-                            !editing
-                        "
-                        class="flex gap-2"
-                    >
-                        <Input
-                            :id="field.name"
-                            v-model="form[field.name]"
-                            :type="field.type"
-                            placeholder="点击右侧按钮生成"
-                        />
-                        <Button
-                            type="button"
-                            variant="secondary"
-                            class="shrink-0"
-                            @click="generateSecret"
-                        >
-                            生成密钥
-                        </Button>
-                    </div>
                     <Input
-                        v-else
                         :id="field.name"
                         v-model="form[field.name]"
                         :type="field.type"
@@ -571,26 +611,29 @@ watch(
                     </div>
                 </div>
 
-                <div v-if="form.errors[field.name]" class="text-sm text-red-600">
+                <div
+                    v-if="form.errors[field.name]"
+                    class="text-sm text-red-600"
+                >
                     {{ form.errors[field.name] }}
                 </div>
             </div>
 
-            <div class="flex gap-2 border-t border-sidebar-border/70 pt-2 md:col-span-2">
+            <div
+                class="flex gap-2 border-t border-sidebar-border/70 pt-2 md:col-span-2"
+            >
                 <Button type="submit" :disabled="form.processing">
                     {{ editing ? '更新' : '创建' }}
                 </Button>
-                <Button
-                    type="button"
-                    variant="ghost"
-                    @click="showForm = false"
-                >
+                <Button type="button" variant="ghost" @click="showForm = false">
                     取消
                 </Button>
             </div>
         </form>
 
-        <div class="overflow-hidden rounded-lg border border-sidebar-border/70 dark:border-sidebar-border">
+        <div
+            class="overflow-hidden rounded-lg border border-sidebar-border/70 dark:border-sidebar-border"
+        >
             <table class="w-full text-sm">
                 <thead class="bg-muted/50 text-left">
                     <tr>
@@ -612,7 +655,7 @@ watch(
                 <tbody>
                     <tr
                         v-for="item in items.data"
-                        :key="item.id"
+                        :key="item.row_key ?? item.id"
                         class="border-t border-sidebar-border/70"
                     >
                         <td
@@ -640,16 +683,6 @@ watch(
                         </td>
                         <td v-if="shouldShowActions()" class="px-3 py-2">
                             <div class="flex gap-1">
-                                <Button
-                                    v-if="resource.name === 'applications'"
-                                    size="icon"
-                                    variant="ghost"
-                                    as-child
-                                >
-                                    <Link :href="showApplication(item.id).url">
-                                        <Eye class="size-4" />
-                                    </Link>
-                                </Button>
                                 <Button
                                     v-if="!resource.readOnly"
                                     size="icon"
@@ -697,8 +730,9 @@ watch(
                 :variant="link.active ? 'default' : 'secondary'"
                 size="sm"
                 @click="link.url && router.visit(link.url)"
-                v-html="link.label"
-            />
+            >
+                <span v-html="link.label" />
+            </Button>
         </div>
     </div>
 </template>

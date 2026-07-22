@@ -2,9 +2,8 @@ export type User = {
     id: number;
     account: string;
     name: string;
-    email: string;
     avatar?: string;
-    email_verified_at: string | null;
+    is_company_admin?: boolean;
     is_platform_admin?: boolean;
     created_at: string;
     updated_at: string;
@@ -13,9 +12,8 @@ export type User = {
 
 export type Tenant = {
     id: number;
-    code: string;
     name: string;
-    status: string;
+    status: boolean;
 };
 
 export type Auth = {
@@ -23,18 +21,13 @@ export type Auth = {
     tenant: Tenant | null;
     tenants: Tenant[];
     membership: {
-        status: string;
-        is_owner: boolean;
-        permission_version: number;
+        status: boolean;
+        is_company_admin: boolean;
     } | null;
     identity: {
         is_platform_admin: boolean;
+        has_platform_access: boolean;
+        platform_permissions: string[];
         is_company_owner: boolean;
     };
-};
-
-export type TwoFactorConfigContent = {
-    title: string;
-    description: string;
-    buttonText: string;
 };

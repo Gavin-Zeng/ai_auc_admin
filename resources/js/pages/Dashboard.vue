@@ -7,7 +7,7 @@ import { dashboard } from '@/routes';
 import type { AucApplication, AucTenant } from '@/types';
 
 defineProps<{
-    tenant: AucTenant;
+    tenant: AucTenant | null;
     applications: AucApplication[];
     identity: {
         roles: string[];
@@ -38,10 +38,19 @@ defineOptions({
                     <h1 class="text-2xl font-semibold tracking-normal">
                         AUC 工作台
                     </h1>
-                    <Badge variant="secondary">{{ tenant.name }}</Badge>
+                    <Badge
+                        v-if="!identity.roles.includes('platform_admin')"
+                        variant="secondary"
+                    >
+                        {{ tenant?.name }}
+                    </Badge>
                 </div>
                 <p class="max-w-3xl text-sm text-muted-foreground">
-                    当前公司的统一认证、访问权限和业务系统入口。
+                    {{
+                        identity.roles.includes('platform_admin')
+                            ? '查看并管理平台全部业务系统。'
+                            : '当前公司的统一认证、访问权限和业务系统入口。'
+                    }}
                 </p>
             </div>
             <div
@@ -75,16 +84,41 @@ defineOptions({
         </section>
 
         <div class="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-            <a
+            <component
                 v-for="application in applications"
                 :key="application.id"
-                :href="application.authorize_url"
-                class="group rounded-lg border border-sidebar-border/70 bg-background p-4 transition hover:border-primary/60 hover:shadow-sm dark:border-sidebar-border"
+                :is="application.action_url ? 'a' : 'div'"
+                :href="application.action_url ?? undefined"
+                :target="application.action_url ? '_blank' : undefined"
+                :rel="
+                    application.action_url ? 'noopener noreferrer' : undefined
+                "
+                class="group rounded-lg border border-sidebar-border/70 bg-background p-4 transition dark:border-sidebar-border"
+                :class="
+                    application.action_url
+                        ? 'hover:border-primary/60 hover:shadow-sm'
+                        : 'opacity-70'
+                "
             >
                 <div class="flex items-start justify-between gap-4">
                     <div>
                         <div class="text-base font-semibold">
                             {{ application.name }}
+                        </div>
+                        <div class="mt-2 flex flex-wrap gap-2">
+                            <Badge variant="outline">
+                                {{ application.status ? '启用' : '停用' }}
+                            </Badge>
+                            <Badge
+                                v-if="identity.roles.includes('platform_admin')"
+                                variant="secondary"
+                            >
+                                {{
+                                    application.is_available
+                                        ? '可进入'
+                                        : '待配置'
+                                }}
+                            </Badge>
                         </div>
                         <div class="mt-1 text-sm text-muted-foreground">
                             {{ application.base_url }}
@@ -94,14 +128,14 @@ defineOptions({
                         <ExternalLink class="size-4" />
                     </Button>
                 </div>
-            </a>
+            </component>
         </div>
 
         <div
             v-if="applications.length === 0"
             class="rounded-lg border border-dashed border-sidebar-border/70 p-8 text-center text-sm text-muted-foreground dark:border-sidebar-border"
         >
-            当前公司暂无可访问应用。
+            暂无可访问系统。
         </div>
     </div>
 </template>

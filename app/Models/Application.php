@@ -5,8 +5,8 @@ namespace App\Models;
 use Database\Factories\ApplicationFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
-use Illuminate\Support\Facades\Hash;
 
 class Application extends Model
 {
@@ -15,49 +15,32 @@ class Application extends Model
 
     protected $table = 'auc_applications';
 
-    /**
-     * @var list<string>
-     */
-    protected $hidden = [
-        'client_secret',
-    ];
+    protected $fillable = ['name', 'client_id', 'client_secret', 'status'];
 
-    /**
-     * @var list<string>
-     */
-    protected $fillable = [
-        'name',
-        'client_id',
-        'client_secret',
-        'base_url',
-        'redirect_uri',
-        'icon',
-        'status',
-    ];
+    protected $hidden = ['client_secret'];
 
-    /**
-     * @return HasMany<TenantApplication, $this>
-     */
-    public function tenantApplications(): HasMany
+    public function urls(): HasMany
     {
-        return $this->hasMany(TenantApplication::class);
+        return $this->hasMany(ApplicationUrl::class);
+    }
+
+    public function menus(): HasMany
+    {
+        return $this->hasMany(Menu::class);
+    }
+
+    public function tenants(): BelongsToMany
+    {
+        return $this->belongsToMany(Tenant::class, 'auc_tenant_applications')->withTimestamps();
     }
 
     public function isActive(): bool
     {
-        return $this->status === 'active';
+        return $this->status;
     }
 
-    public function setClientSecretAttribute(string $value): void
-    {
-        $this->attributes['client_secret'] = Hash::needsRehash($value) ? Hash::make($value) : $value;
-    }
-
-    /**
-     * @return array<string, string>
-     */
     protected function casts(): array
     {
-        return [];
+        return ['status' => 'boolean'];
     }
 }

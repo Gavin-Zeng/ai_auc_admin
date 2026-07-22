@@ -2,37 +2,23 @@
 
 namespace Database\Factories;
 
+use App\Models\Application;
 use App\Models\Menu;
-use App\Models\Tenant;
 use Illuminate\Database\Eloquent\Factories\Factory;
 
-/**
- * @extends Factory<Menu>
- */
+/** @extends Factory<Menu> */
 class MenuFactory extends Factory
 {
-    /**
-     * Define the model's default state.
-     *
-     * @return array<string, mixed>
-     */
     public function definition(): array
     {
-        $code = fake()->unique()->slug(2);
-
         return [
-            'tenant_id' => Tenant::factory(),
-            'menu_group_id' => null,
-            'application_id' => null,
+            'application_id' => Application::factory(),
             'parent_id' => null,
-            'code' => $code,
-            'title' => fake()->words(2, true),
-            'href' => '/'.$code,
-            'icon' => null,
-            'required_permissions' => [],
-            'sort_order' => fake()->numberBetween(1, 100),
+            'name' => fake()->words(2, true),
+            'path' => '/'.fake()->unique()->slug(),
             'is_visible' => true,
-            'status' => 'active',
+            'sort_order' => fake()->numberBetween(0, 100),
+            'status' => true,
         ];
     }
 }

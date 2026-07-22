@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { Head, Link } from '@inertiajs/vue3';
 import { ArrowRight, ShieldCheck } from 'lucide-vue-next';
-import { dashboard, login, register } from '@/routes';
+import { dashboard, login } from '@/routes';
 
 withDefaults(
     defineProps<{
@@ -56,13 +56,6 @@ withDefaults(
                         >
                             登录
                             <ArrowRight class="size-4" />
-                        </Link>
-                        <Link
-                            v-if="canRegister"
-                            :href="register()"
-                            class="inline-flex items-center rounded-md border border-sidebar-border/70 px-4 py-2 text-sm font-medium"
-                        >
-                            注册
                         </Link>
                     </template>
                 </div>

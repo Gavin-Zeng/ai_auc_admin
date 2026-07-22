@@ -10,6 +10,7 @@ use Illuminate\Database\Eloquent\Collection as EloquentCollection;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -23,6 +24,7 @@ trait ManagesResources
 
         $query = $this->resourceQuery($request);
         $search = $request->string('search')->toString();
+        $companyId = $request->integer('company_id') ?: null;
 
         if ($search !== '') {
             $query->where(function (Builder $query) use ($search): void {
@@ -32,63 +34,74 @@ trait ManagesResources
             });
         }
 
-        $items = $query->latest('id')->paginate(10)->withQueryString();
+        $items = $query->latest($this->latestColumn())->paginate(10)->withQueryString();
 
         $this->transformItems($items->getCollection(), $request);
 
         return Inertia::render('admin/ResourceIndex', [
             'resource' => $this->resourceConfig($request),
             'items' => $items,
-            'filters' => ['search' => $search],
+            'filters' => ['search' => $search, 'company_id' => $companyId],
             'options' => $this->resourceOptions($request),
         ]);
     }
 
     public function store(Request $request, TenantContext $tenantContext, AuditLogger $auditLogger, PermissionVersion $permissionVersion): RedirectResponse
     {
-        $currentTenant = $tenantContext->current() ?? $tenantContext->resolveForRequest($request);
-        abort_if($currentTenant === null && ! $request->user()?->isPlatformAdmin(), 403);
+        return DB::transaction(function () use ($request, $tenantContext, $auditLogger, $permissionVersion): RedirectResponse {
+            $currentTenant = $tenantContext->current() ?? $tenantContext->resolveForRequest($request);
+            abort_if($currentTenant === null && ! $request->user()?->isPlatformAdmin(), 403);
 
-        $data = $this->validated($request);
-        $tenant = $this->tenantForWrite($request, $currentTenant);
-        $model = $this->resourceModel()::query()->create($this->prepareData($request, $data));
+            $data = $this->validated($request);
+            $tenant = $this->tenantForWrite($request, $currentTenant);
+            $model = $this->resourceModel()::query()->create($this->prepareData($request, $data));
 
-        $this->afterWrite($request, $model, $tenant, $permissionVersion);
-        $auditLogger->log($request, $this->auditAction('created'), $model, $tenant);
+            $this->afterWrite($request, $model, $tenant, $permissionVersion);
+            $auditLogger->log($request, $this->auditAction('created'), $model, $tenant);
 
-        return back()->with('status', $this->resourceLabel().'已创建。');
+            return back()->with('status', $this->resourceLabel().'已创建。');
+        });
     }
 
     public function update(Request $request, TenantContext $tenantContext, AuditLogger $auditLogger, PermissionVersion $permissionVersion): RedirectResponse
     {
-        $currentTenant = $tenantContext->current() ?? $tenantContext->resolveForRequest($request);
-        abort_if($currentTenant === null && ! $request->user()?->isPlatformAdmin(), 403);
-        $model = $this->routeModel($request);
-        $this->authorizeResourceModel($model, $currentTenant);
+        return DB::transaction(function () use ($request, $tenantContext, $auditLogger, $permissionVersion): RedirectResponse {
+            $currentTenant = $tenantContext->current() ?? $tenantContext->resolveForRequest($request);
+            abort_if($currentTenant === null && ! $request->user()?->isPlatformAdmin(), 403);
+            $model = $this->routeModel($request);
+            $this->authorizeResourceModel($model, $currentTenant);
 
-        $data = $this->validated($request, $model);
-        $tenant = $this->tenantForWrite($request, $currentTenant, $model);
-        $model->forceFill($this->prepareData($request, $data, $model))->save();
+            $data = $this->validated($request, $model);
+            $tenant = $this->tenantForWrite($request, $currentTenant, $model);
+            $before = $model->getAttributes();
+            $model->forceFill($this->prepareData($request, $data, $model))->save();
 
-        $this->afterWrite($request, $model, $tenant, $permissionVersion);
-        $auditLogger->log($request, $this->auditAction('updated'), $model, $tenant);
+            $this->afterWrite($request, $model, $tenant, $permissionVersion);
+            $auditLogger->log($request, $this->auditAction('updated'), $model, $tenant, [
+                'before' => $before,
+                'after' => $model->fresh()?->getAttributes(),
+            ]);
 
-        return back()->with('status', $this->resourceLabel().'已更新。');
+            return back()->with('status', $this->resourceLabel().'已更新。');
+        });
     }
 
     public function destroy(Request $request, TenantContext $tenantContext, AuditLogger $auditLogger, PermissionVersion $permissionVersion): RedirectResponse
     {
-        $tenant = $tenantContext->current() ?? $tenantContext->resolveForRequest($request);
-        abort_if($tenant === null, 403);
-        $model = $this->routeModel($request);
-        $this->authorizeResourceModel($model, $tenant);
+        return DB::transaction(function () use ($request, $tenantContext, $auditLogger, $permissionVersion): RedirectResponse {
+            $currentTenant = $tenantContext->current() ?? $tenantContext->resolveForRequest($request);
+            abort_if($currentTenant === null && ! $request->user()?->isPlatformAdmin(), 403);
+            $model = $this->routeModel($request);
+            $this->authorizeResourceModel($model, $currentTenant);
+            $tenant = $this->tenantForWrite($request, $currentTenant, $model);
 
-        $this->disableResourceModel($request, $model, $tenant);
+            $this->disableResourceModel($request, $model, $tenant);
 
-        $this->afterWrite($request, $model, $tenant, $permissionVersion);
-        $auditLogger->log($request, $this->auditAction('disabled'), $model, $tenant);
+            $this->afterWrite($request, $model, $tenant, $permissionVersion);
+            $auditLogger->log($request, $this->auditAction('disabled'), $model, $tenant);
 
-        return back()->with('status', $this->resourceLabel().'已停用。');
+            return back()->with('status', $this->resourceLabel().'已停用。');
+        });
     }
 
     /**
@@ -115,6 +128,11 @@ trait ManagesResources
     protected function searchColumns(): array
     {
         return ['name', 'code'];
+    }
+
+    protected function latestColumn(): string
+    {
+        return 'id';
     }
 
     protected function resourceQuery(Request $request): Builder
@@ -167,7 +185,7 @@ trait ManagesResources
     protected function disableResourceModel(Request $request, Model $model, mixed $tenant): void
     {
         if (array_key_exists('status', $model->getAttributes())) {
-            $model->forceFill(['status' => 'disabled'])->save();
+            $model->forceFill(['status' => false])->save();
         } else {
             $model->delete();
         }

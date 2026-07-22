@@ -1,30 +1,12 @@
 <script setup lang="ts">
 import { Form, Head } from '@inertiajs/vue3';
-import { ShieldCheck } from 'lucide-vue-next';
-import { onUnmounted, ref } from 'vue';
 import SecurityController from '@/actions/App/Http/Controllers/Settings/SecurityController';
 import Heading from '@/components/Heading.vue';
 import InputError from '@/components/InputError.vue';
 import PasswordInput from '@/components/PasswordInput.vue';
-import TwoFactorRecoveryCodes from '@/components/TwoFactorRecoveryCodes.vue';
-import TwoFactorSetupModal from '@/components/TwoFactorSetupModal.vue';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
-import { useTwoFactorAuth } from '@/composables/useTwoFactorAuth';
 import { edit } from '@/routes/security';
-import { disable, enable } from '@/routes/two-factor';
-
-type Props = {
-    canManageTwoFactor?: boolean;
-    requiresConfirmation?: boolean;
-    twoFactorEnabled?: boolean;
-};
-
-withDefaults(defineProps<Props>(), {
-    canManageTwoFactor: false,
-    requiresConfirmation: false,
-    twoFactorEnabled: false,
-});
 
 defineOptions({
     layout: {
@@ -37,10 +19,6 @@ defineOptions({
     },
 });
 
-const { hasSetupData, clearTwoFactorAuthData } = useTwoFactorAuth();
-const showSetupModal = ref<boolean>(false);
-
-onUnmounted(() => clearTwoFactorAuthData());
 </script>
 
 <template>
@@ -116,62 +94,4 @@ onUnmounted(() => clearTwoFactorAuthData());
         </Form>
     </div>
 
-    <div v-if="canManageTwoFactor" class="space-y-6">
-        <Heading
-            variant="small"
-            title="二次验证"
-            description="管理账号的二次验证设置"
-        />
-
-        <div
-            v-if="!twoFactorEnabled"
-            class="flex flex-col items-start justify-start space-y-4"
-        >
-            <p class="text-sm text-muted-foreground">
-                启用二次验证后，登录时需要输入安全验证码。验证码可从手机上的 TOTP 应用获取。
-            </p>
-
-            <div>
-                <Button v-if="hasSetupData" @click="showSetupModal = true">
-                    <ShieldCheck />继续设置
-                </Button>
-                <Form
-                    v-else
-                    v-bind="enable.form()"
-                    @success="showSetupModal = true"
-                    #default="{ processing }"
-                >
-                    <Button type="submit" :disabled="processing">
-                        启用 2FA
-                    </Button>
-                </Form>
-            </div>
-        </div>
-
-        <div v-else class="flex flex-col items-start justify-start space-y-4">
-            <p class="text-sm text-muted-foreground">
-                登录时将要求输入安全验证码，该验证码可从手机上的 TOTP 应用获取。
-            </p>
-
-            <div class="relative inline">
-                <Form v-bind="disable.form()" #default="{ processing }">
-                    <Button
-                        variant="destructive"
-                        type="submit"
-                        :disabled="processing"
-                    >
-                        禁用 2FA
-                    </Button>
-                </Form>
-            </div>
-
-            <TwoFactorRecoveryCodes />
-        </div>
-
-        <TwoFactorSetupModal
-            v-model:isOpen="showSetupModal"
-            :requiresConfirmation="requiresConfirmation"
-            :twoFactorEnabled="twoFactorEnabled"
-        />
-    </div>
 </template>

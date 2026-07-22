@@ -1,97 +1,35 @@
 <?php
 
-use App\Models\Permission;
+use App\Models\Application;
+use App\Models\ApplicationUrl;
+use App\Models\Menu;
 use App\Models\Role;
 use App\Models\Tenant;
-use App\Models\TenantApplication;
-use App\Models\TenantUser;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
-/*
-|--------------------------------------------------------------------------
-| Test Case
-|--------------------------------------------------------------------------
-|
-| The closure you provide to your test functions is always bound to a specific PHPUnit test
-| case class. By default, that class is "PHPUnit\Framework\TestCase". Of course, you may
-| need to change it using the "pest()" function to bind different classes or traits.
-|
-*/
+pest()->extend(TestCase::class)->use(RefreshDatabase::class)->in('Feature');
 
-pest()->extend(TestCase::class)
-    ->use(RefreshDatabase::class)
-    ->in('Feature');
-
-/*
-|--------------------------------------------------------------------------
-| Expectations
-|--------------------------------------------------------------------------
-|
-| When you're writing tests, you often need to check that values meet certain conditions. The
-| "expect()" function gives you access to a set of "expectations" methods that you can use
-| to assert different things. Of course, you may extend the Expectation API at any time.
-|
-*/
-
-expect()->extend('toBeOne', function () {
-    return $this->toBe(1);
-});
-
-/*
-|--------------------------------------------------------------------------
-| Functions
-|--------------------------------------------------------------------------
-|
-| While Pest is very powerful out-of-the-box, you may have some testing code specific to your
-| project that you don't want to repeat in every file. Here you can also expose helpers as
-| global functions to help you to reduce the number of lines of code in your test files.
-|
-*/
-
-function something()
+function simpleCompanyUser(bool $admin = false): array
 {
-    // ..
+    $tenant = Tenant::factory()->create();
+    $role = Role::factory()->create(['tenant_id' => $tenant->id]);
+    $user = User::factory()->create([
+        'tenant_id' => $tenant->id,
+        'role_id' => $admin ? null : $role->id,
+        'is_company_admin' => $admin,
+    ]);
+
+    return [$user, $tenant, $role];
 }
 
-function aucGrant(User $user, Tenant $tenant, array $permissionCodes, bool $isOwner = false): void
+function simpleApplication(Tenant $tenant): array
 {
-    TenantUser::query()->updateOrCreate([
-        'tenant_id' => $tenant->id,
-        'user_id' => $user->id,
-    ], [
-        'status' => 'active',
-        'is_owner' => $isOwner,
-        'permission_version' => 1,
-    ]);
+    $application = Application::factory()->create();
+    $url = ApplicationUrl::factory()->create(['application_id' => $application->id]);
+    $tenant->applications()->attach($application);
+    $menu = Menu::factory()->create(['application_id' => $application->id]);
 
-    $role = Role::query()->firstOrCreate([
-        'tenant_id' => $tenant->id,
-        'code' => 'operator',
-    ], [
-        'name' => 'Operator',
-        'status' => 'active',
-    ]);
-
-    $permissions = collect($permissionCodes)->map(fn (string $code) => Permission::factory()->create([
-        'code' => $code,
-        'name' => $code,
-        'status' => 'active',
-    ]));
-
-    $role->permissions()->sync($permissions->pluck('id')->all());
-    $user->roles()->attach($role->id, ['tenant_id' => $tenant->id]);
-}
-
-function aucOpenApplication(Tenant $tenant, mixed $application, array $requiredPermissions = [], string $status = 'active'): void
-{
-    TenantApplication::query()->updateOrCreate([
-        'tenant_id' => $tenant->id,
-        'application_id' => $application->id,
-    ], [
-        'required_permissions' => $requiredPermissions,
-        'status' => $status,
-        'sort_order' => 0,
-    ]);
+    return [$application, $url, $menu];
 }

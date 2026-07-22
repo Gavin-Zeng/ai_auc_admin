@@ -40,9 +40,6 @@ class HandleInertiaRequests extends Middleware
     {
         $user = $request->user();
         $tenant = app(TenantContext::class)->current();
-        $membership = $user !== null && $tenant !== null
-            ? app(TenantContext::class)->membership($user, $tenant)
-            : null;
 
         return [
             ...parent::share($request),
@@ -50,16 +47,16 @@ class HandleInertiaRequests extends Middleware
             'auth' => [
                 'user' => $user,
                 'tenant' => $tenant,
-                'membership' => $membership?->only(['status', 'is_owner', 'permission_version']),
+                'membership' => $user?->only(['status', 'is_company_admin']),
                 'identity' => [
                     'is_platform_admin' => $user?->isPlatformAdmin() ?? false,
+                    'has_platform_access' => $user?->hasPlatformAccess() ?? false,
+                    'platform_permissions' => $user?->isPlatformAdmin() ? ['*'] : [],
                     'is_company_owner' => $user !== null && $tenant !== null && $user->isCompanyOwner($tenant),
                 ],
                 'tenants' => fn () => $user === null ? [] : ($user->isPlatformAdmin()
-                    ? Tenant::query()
-                    : $user->tenants())
-                    ->orderBy('name')
-                    ->get(['auc_tenants.id', 'auc_tenants.code', 'auc_tenants.name', 'auc_tenants.status']),
+                    ? Tenant::query()->orderBy('name')->get(['id', 'name', 'status'])
+                    : collect(array_filter([$user->tenant?->only(['id', 'name', 'status'])]))),
             ],
             'auc' => fn () => $user === null || $tenant === null ? [
                 'roles' => [],

@@ -26,14 +26,14 @@ export type AucApplication = {
     id: number;
     client_id: string;
     name: string;
-    base_url: string;
-    icon: string | null;
-    authorize_url: string;
+    base_url: string | null;
+    status: boolean;
+    is_available: boolean;
+    action_url: string | null;
 };
 
 export type AucTenant = {
     id: number;
-    code: string;
     name: string;
-    status: string;
+    status: boolean;
 };

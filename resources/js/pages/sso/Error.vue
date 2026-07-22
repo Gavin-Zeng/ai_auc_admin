@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { Head, Link } from '@inertiajs/vue3';
 import { AlertTriangle } from 'lucide-vue-next';
-import { dashboard } from '@/routes';
 import { Button } from '@/components/ui/button';
+import { dashboard } from '@/routes';
 
 defineProps<{
     message: string;
@@ -13,7 +13,9 @@ defineProps<{
 <template>
     <Head title="SSO 跳转失败" />
 
-    <main class="flex min-h-screen items-center justify-center bg-background p-6">
+    <main
+        class="flex min-h-screen items-center justify-center bg-background p-6"
+    >
         <section class="w-full max-w-md space-y-5 text-center">
             <div
                 class="mx-auto flex size-12 items-center justify-center rounded-full bg-destructive/10 text-destructive"

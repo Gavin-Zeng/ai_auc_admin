@@ -15,11 +15,20 @@ class DashboardController extends Controller
         $user = $request->user();
         $tenant = $tenantContext->current() ?? $tenantContext->resolveForRequest($request);
 
+        if ($user?->isPlatformAdmin() && $tenant === null) {
+            return Inertia::render('Dashboard', [
+                'tenant' => null,
+                'applications' => $authorization->dashboardApplications($user, null),
+                'menus' => [],
+                'identity' => ['roles' => ['platform_admin'], 'permissions' => ['*'], 'permission_version' => 1],
+            ]);
+        }
+
         abort_if($user === null || $tenant === null, 403);
 
         return Inertia::render('Dashboard', [
-            'tenant' => $tenant->only(['id', 'code', 'name', 'status']),
-            'applications' => $authorization->applications($user, $tenant),
+            'tenant' => $tenant->only(['id', 'name', 'status']),
+            'applications' => $authorization->dashboardApplications($user, $tenant),
             'menus' => $authorization->menus($user, $tenant),
             'identity' => $authorization->identity($user, $tenant),
         ]);

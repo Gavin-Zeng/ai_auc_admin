@@ -47,9 +47,15 @@ class DemoSubsystemController extends Controller
             'auc_user_id' => $payload['user']['id'],
             'user' => $payload['user'],
             'tenant' => $payload['tenant'],
+            'membership_id' => $payload['membership_id'] ?? null,
+            'application' => $payload['application'] ?? null,
             'roles' => $payload['roles'],
             'permissions' => $payload['permissions'],
+            'business_scopes' => $payload['business_scopes'] ?? [],
+            'scope_reference' => $payload['scope_reference'] ?? null,
             'permission_version' => $payload['permission_version'],
+            'issued_at' => $payload['issued_at'] ?? now()->getTimestamp(),
+            'expires_at' => $payload['expires_at'] ?? now()->addHour()->getTimestamp(),
             'session_expires_at' => $payload['session_expires_at'],
         ]);
 

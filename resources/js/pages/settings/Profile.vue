@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Form, Head, Link, usePage } from '@inertiajs/vue3';
+import { Form, Head, usePage } from '@inertiajs/vue3';
 import { computed } from 'vue';
 import ProfileController from '@/actions/App/Http/Controllers/Settings/ProfileController';
 import DeleteUser from '@/components/DeleteUser.vue';
@@ -9,7 +9,6 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { edit } from '@/routes/profile';
-import { send } from '@/routes/verification';
 
 type Props = {
     mustVerifyEmail: boolean;
@@ -42,7 +41,7 @@ const user = computed(() => page.props.auth.user);
         <Heading
             variant="small"
             title="个人信息"
-            description="更新你的账号、姓名和邮箱地址"
+            description="更新你的账号和姓名"
         />
 
         <Form
@@ -76,41 +75,6 @@ const user = computed(() => page.props.auth.user);
                     placeholder="姓名"
                 />
                 <InputError class="mt-2" :message="errors.name" />
-            </div>
-
-            <div class="grid gap-2">
-                <Label for="email">邮箱地址</Label>
-                <Input
-                    id="email"
-                    type="email"
-                    class="mt-1 block w-full"
-                    name="email"
-                    :default-value="user.email"
-                    required
-                    autocomplete="email"
-                    placeholder="邮箱地址"
-                />
-                <InputError class="mt-2" :message="errors.email" />
-            </div>
-
-            <div v-if="mustVerifyEmail && !user.email_verified_at">
-                <p class="-mt-4 text-sm text-muted-foreground">
-                    你的邮箱地址尚未验证。
-                    <Link
-                        :href="send()"
-                        as="button"
-                        class="text-foreground underline decoration-neutral-300 underline-offset-4 transition-colors duration-300 ease-out hover:decoration-current! dark:decoration-neutral-500"
-                    >
-                        点击此处重新发送验证邮件。
-                    </Link>
-                </p>
-
-                <div
-                    v-if="status === 'verification-link-sent'"
-                    class="mt-2 text-sm font-medium text-green-600"
-                >
-                    新的验证链接已发送到你的邮箱地址。
-                </div>
             </div>
 
             <div class="flex items-center gap-4">

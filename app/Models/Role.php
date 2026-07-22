@@ -7,6 +7,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Role extends Model
 {
@@ -15,51 +16,25 @@ class Role extends Model
 
     protected $table = 'auc_roles';
 
-    /**
-     * @var list<string>
-     */
-    protected $fillable = [
-        'tenant_id',
-        'code',
-        'name',
-        'status',
-        'is_system',
-    ];
+    protected $fillable = ['tenant_id', 'name', 'status'];
 
-    /**
-     * @return BelongsTo<Tenant, $this>
-     */
     public function tenant(): BelongsTo
     {
         return $this->belongsTo(Tenant::class);
     }
 
-    /**
-     * @return BelongsToMany<Permission, $this>
-     */
-    public function permissions(): BelongsToMany
+    public function users(): HasMany
     {
-        return $this->belongsToMany(Permission::class, 'auc_role_permissions')
-            ->withTimestamps();
+        return $this->hasMany(User::class);
     }
 
-    /**
-     * @return BelongsToMany<User, $this>
-     */
-    public function users(): BelongsToMany
+    public function menus(): BelongsToMany
     {
-        return $this->belongsToMany(User::class, 'auc_user_roles')
-            ->withPivot(['tenant_id'])
-            ->withTimestamps();
+        return $this->belongsToMany(Menu::class, 'auc_role_menus')->withTimestamps();
     }
 
-    /**
-     * @return array<string, string>
-     */
     protected function casts(): array
     {
-        return [
-            'is_system' => 'boolean',
-        ];
+        return ['status' => 'boolean'];
     }
 }

@@ -15,66 +15,30 @@ class Tenant extends Model
 
     protected $table = 'auc_tenants';
 
-    /**
-     * @var list<string>
-     */
-    protected $fillable = [
-        'code',
-        'name',
-        'domain',
-        'status',
-        'expires_at',
-        'settings',
-    ];
+    protected $fillable = ['name', 'status'];
 
-    /**
-     * @return HasMany<TenantUser, $this>
-     */
-    public function memberships(): HasMany
+    public function users(): HasMany
     {
-        return $this->hasMany(TenantUser::class);
+        return $this->hasMany(User::class);
     }
 
-    /**
-     * @return BelongsToMany<User, $this>
-     */
-    public function users(): BelongsToMany
-    {
-        return $this->belongsToMany(User::class, 'auc_tenant_users')
-            ->withPivot(['status', 'is_owner', 'permission_version'])
-            ->withTimestamps();
-    }
-
-    /**
-     * @return HasMany<TenantApplication, $this>
-     */
-    public function tenantApplications(): HasMany
-    {
-        return $this->hasMany(TenantApplication::class);
-    }
-
-    /**
-     * @return HasMany<Role, $this>
-     */
     public function roles(): HasMany
     {
         return $this->hasMany(Role::class);
     }
 
-    public function isActive(): bool
+    public function applications(): BelongsToMany
     {
-        return $this->status === 'active'
-            && ($this->expires_at === null || $this->expires_at->isFuture());
+        return $this->belongsToMany(Application::class, 'auc_tenant_applications')->withTimestamps();
     }
 
-    /**
-     * @return array<string, string>
-     */
+    public function isActive(): bool
+    {
+        return $this->status;
+    }
+
     protected function casts(): array
     {
-        return [
-            'expires_at' => 'datetime',
-            'settings' => 'array',
-        ];
+        return ['status' => 'boolean'];
     }
 }
