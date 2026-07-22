@@ -35,8 +35,12 @@ class PermissionResolver
 
     public function canAccessApplication(User $user, Tenant $tenant, Application $application): bool
     {
-        if (! $application->isActive() || ! $tenant->applications()->whereKey($application)->exists()) {
+        if (! $application->isActive() || ! $tenant->isActive() || ! $tenant->applications()->whereKey($application)->exists()) {
             return false;
+        }
+
+        if ($user->isPlatformAdmin()) {
+            return true;
         }
 
         return $this->menus($user, $tenant, $application)->isNotEmpty();

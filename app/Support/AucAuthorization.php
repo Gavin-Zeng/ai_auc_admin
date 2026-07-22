@@ -89,14 +89,19 @@ class AucAuthorization
             ->with(['urls' => fn ($query) => $query
                 ->select(['id', 'application_id', 'base_url', 'redirect_uri', 'is_default'])
                 ->where('status', true)
-                ->orderByDesc('is_default')])
+                ->orderByDesc('is_default'),
+                'tenants' => fn ($query) => $query
+                    ->select(['auc_tenants.id', 'auc_tenants.name', 'auc_tenants.status'])
+                    ->where('auc_tenants.status', true)
+                    ->orderBy('auc_tenants.id')])
             ->orderBy('name')
             ->get()
-            ->map(function (Application $application) use ($user, $tenant): array {
+            ->map(function (Application $application) use ($tenant): array {
                 $url = $application->urls->first();
-                $isAvailable = $tenant !== null
-                    && $url !== null
-                    && $this->canAccessApplication($user, $tenant, $application);
+                $accessTenant = $tenant !== null && $application->tenants->contains('id', $tenant->id)
+                    ? $tenant
+                    : $application->tenants->first();
+                $isAvailable = $application->isActive() && $url !== null && $accessTenant !== null;
 
                 return [
                     'id' => $application->id,
@@ -108,7 +113,7 @@ class AucAuthorization
                     'action_url' => $isAvailable ? route('sso.authorize', [
                         'client_id' => $application->client_id,
                         'redirect_uri' => $url->redirect_uri,
-                        'tenant_id' => $tenant->id,
+                        'tenant_id' => $accessTenant->id,
                     ]) : null,
                 ];
             })->values()->all();

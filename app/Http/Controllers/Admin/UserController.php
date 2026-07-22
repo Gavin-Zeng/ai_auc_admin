@@ -45,12 +45,12 @@ class UserController extends Controller
             'fields' => [
                 ['name' => 'name', 'label' => '姓名', 'type' => 'text', 'required' => true],
                 ['name' => 'account', 'label' => '账号', 'type' => 'text', 'required' => true],
-                ['name' => 'password', 'label' => '密码/重置密码', 'type' => 'password', 'createOnly' => false],
+                ['name' => 'password', 'label' => '密码', 'type' => 'password', 'generatePassword' => true],
                 ['name' => 'tenant_id', 'label' => '所属公司', 'type' => 'select'],
                 ['name' => 'role_id', 'label' => '角色', 'type' => 'select'],
                 ['name' => 'is_company_admin', 'label' => '公司超级管理员', 'type' => 'checkbox', 'default' => false],
                 ['name' => 'is_platform_admin', 'label' => '平台超级管理员', 'type' => 'checkbox', 'default' => false, 'platformOnly' => true],
-                ['name' => 'status', 'label' => '状态', 'type' => 'select', 'options' => [1, 0], 'default' => 1],
+                ['name' => 'status', 'label' => '状态', 'type' => 'select', 'options' => [1, 0], 'default' => 1, 'updateOnly' => true],
             ],
             'columns' => ['name', 'account', 'company_name', 'role_name', 'is_company_admin', 'is_platform_admin', 'status', 'created_at'],
         ];
@@ -74,12 +74,16 @@ class UserController extends Controller
             'password' => [$model === null ? 'required' : 'nullable', 'string', 'min:8'],
             'tenant_id' => ['nullable', 'integer', 'exists:auc_tenants,id'],
             'role_id' => ['nullable', 'integer', 'exists:auc_roles,id'],
-            'is_company_admin' => ['boolean'], 'is_platform_admin' => ['boolean'], 'status' => ['required', 'boolean'],
+            'is_company_admin' => ['boolean'], 'is_platform_admin' => ['boolean'], 'status' => [$model === null ? 'sometimes' : 'required', 'boolean'],
         ];
     }
 
     protected function prepareData(Request $request, array $data, ?Model $model = null): array
     {
+        if ($model === null) {
+            $data['status'] = true;
+        }
+
         if (! $request->user()->isPlatformAdmin()) {
             $data['tenant_id'] = $request->user()->tenant_id;
             $data['is_platform_admin'] = false;

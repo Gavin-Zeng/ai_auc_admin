@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { Head, router, useForm, usePage } from '@inertiajs/vue3';
 import { KeyRound, Pencil, Plus, Search } from 'lucide-vue-next';
-import { computed, ref, watch } from 'vue';
+import { computed, onUnmounted, ref, watch } from 'vue';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -14,7 +14,10 @@ import {
     SelectTrigger,
     SelectValue,
 } from '@/components/ui/select';
-import { store as storeApplication } from '@/routes/applications';
+import {
+    rotateSecret as rotateApplicationSecret,
+    store as storeApplication,
+} from '@/routes/applications';
 
 type FieldOption =
     | string
@@ -44,6 +47,7 @@ type FieldConfig = {
     span?: 1 | 2;
     group?: string;
     platformOnly?: boolean;
+    generatePassword?: boolean;
 };
 
 type ResourceConfig = {
@@ -78,12 +82,23 @@ const companyId = ref(
     props.filters.company_id ? String(props.filters.company_id) : 'all',
 );
 const page = usePage();
-const rotatedSecret = computed(() => page.props.secret as string | undefined);
+const rotatedSecret = ref<string>();
+const rotatingApplicationId = ref<number | string | null>(null);
+const removeFlashListener = router.on('flash', (event) => {
+    const flash = (event as CustomEvent).detail?.flash;
+    const secret = flash?.secret;
+
+    if (typeof secret === 'string') {
+        rotatedSecret.value = secret;
+    }
+});
 const visibleFields = computed(() =>
     props.resource.fields.filter(
         (field) =>
-            !(field.platformOnly && !page.props.auth.identity?.is_platform_admin) &&
-            (editing.value ? !field.createOnly : !field.updateOnly),
+            !(
+                field.platformOnly &&
+                !page.props.auth.identity?.is_platform_admin
+            ) && (editing.value ? !field.createOnly : !field.updateOnly),
     ),
 );
 const formPanelClass = computed(() => 'max-w-4xl');
@@ -95,8 +110,8 @@ const blankValues = computed(() =>
             field.type === 'checkbox'
                 ? Boolean(field.default)
                 : field.default !== undefined && field.default !== null
-                ? String(field.default)
-                : field.type === 'multiselect'
+                  ? String(field.default)
+                  : field.type === 'multiselect'
                     ? []
                     : '',
         ]),
@@ -204,6 +219,17 @@ function fieldOptions(field: FieldConfig): FieldOption[] {
     return field.options ?? props.options[field.name] ?? [];
 }
 
+function generateRandomPassword(field: FieldConfig) {
+    const characters =
+        'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789!@#$%^&*';
+    const randomValues = new Uint32Array(16);
+    crypto.getRandomValues(randomValues);
+    form[field.name] = Array.from(
+        randomValues,
+        (value) => characters[value % characters.length],
+    ).join('');
+}
+
 function requestPayload(): Record<string, any> {
     const fieldNames = new Set(visibleFields.value.map((field) => field.name));
 
@@ -242,7 +268,10 @@ function startEdit(item: Record<string, any>) {
     showForm.value = true;
 }
 
-function statusPayload(item: Record<string, any>, status: boolean): Record<string, any> {
+function statusPayload(
+    item: Record<string, any>,
+    status: boolean,
+): Record<string, any> {
     const fieldNames = new Set(
         props.resource.fields
             .filter((field) => !field.createOnly)
@@ -294,9 +323,7 @@ function toggleStatus(item: Record<string, any>) {
     const currentStatus = Boolean(item.status);
     const nextStatus = !currentStatus;
     const confirmed = confirm(
-        currentStatus
-            ? '确定停用该记录吗？'
-            : '确定启用该记录吗？',
+        currentStatus ? '确定停用该记录吗？' : '确定启用该记录吗？',
     );
 
     if (!confirmed) {
@@ -313,11 +340,21 @@ function toggleStatus(item: Record<string, any>) {
 }
 
 function rotateSecret(item: Record<string, any>) {
+    if (!confirm(`确定轮换“${item.name}”的客户端密钥吗？旧密钥将立即失效。`)) {
+        return;
+    }
+
+    rotatedSecret.value = undefined;
+    rotatingApplicationId.value = item.id;
+
     router.post(
-        `/${props.resource.name}/${item.id}/rotate-secret`,
+        rotateApplicationSecret(item.id).url,
         {},
         {
             preserveScroll: true,
+            onFinish: () => {
+                rotatingApplicationId.value = null;
+            },
         },
     );
 }
@@ -380,9 +417,13 @@ function displayValue(item: Record<string, any>, column: string): string {
     const field = props.resource.fields.find((field) => field.name === column);
 
     if (
-        ['is_owner', 'is_company_admin', 'is_platform_admin', 'is_system', 'is_visible'].includes(
-            column,
-        )
+        [
+            'is_owner',
+            'is_company_admin',
+            'is_platform_admin',
+            'is_system',
+            'is_visible',
+        ].includes(column)
     ) {
         return Boolean(value) ? '是' : '否';
     }
@@ -436,6 +477,8 @@ watch(
             .filter((roleId: string) => allowedRoleIds.has(roleId));
     },
 );
+
+onUnmounted(removeFlashListener);
 </script>
 
 <template>
@@ -522,9 +565,22 @@ watch(
                 :key="field.name"
                 :class="fieldClass(field)"
             >
-                <Label :for="field.name" class="text-xs font-medium">{{
-                    field.label
-                }}</Label>
+                <div class="flex items-center justify-between gap-2">
+                    <Label :for="field.name" class="text-xs font-medium">{{
+                        field.label
+                    }}</Label>
+                    <Button
+                        v-if="field.generatePassword"
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        class="h-7 px-2 text-xs"
+                        data-test="generate-password"
+                        @click="generateRandomPassword(field)"
+                    >
+                        随机生成密码
+                    </Button>
+                </div>
 
                 <textarea
                     v-if="field.type === 'textarea'"
@@ -700,9 +756,23 @@ watch(
                                     "
                                     size="icon"
                                     variant="ghost"
+                                    :aria-label="`轮换 ${item.name} 的客户端密钥`"
+                                    :title="
+                                        rotatingApplicationId === item.id
+                                            ? '正在轮换客户端密钥'
+                                            : '轮换客户端密钥'
+                                    "
+                                    :disabled="rotatingApplicationId !== null"
                                     @click="rotateSecret(item)"
                                 >
-                                    <KeyRound class="size-4" />
+                                    <KeyRound
+                                        class="size-4"
+                                        :class="{
+                                            'animate-pulse':
+                                                rotatingApplicationId ===
+                                                item.id,
+                                        }"
+                                    />
                                 </Button>
                             </div>
                         </td>

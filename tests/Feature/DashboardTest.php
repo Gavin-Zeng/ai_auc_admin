@@ -53,6 +53,27 @@ test('platform administrator sees every application without company context', fu
         );
 });
 
+test('platform administrator without company context can enter a system opened by an active company', function () {
+    $tenant = Tenant::factory()->create();
+    $application = Application::factory()->create();
+    $url = ApplicationUrl::factory()->create(['application_id' => $application->id]);
+    $tenant->applications()->attach($application);
+
+    $this->actingAs(User::factory()->platformAdmin()->create())
+        ->get(route('dashboard'))
+        ->assertOk()
+        ->assertInertia(fn (Assert $page) => $page
+            ->has('applications', 1)
+            ->where('applications.0.id', $application->id)
+            ->where('applications.0.is_available', true)
+            ->where('applications.0.action_url', route('sso.authorize', [
+                'client_id' => $application->client_id,
+                'redirect_uri' => $url->redirect_uri,
+                'tenant_id' => $tenant->id,
+            ]))
+        );
+});
+
 test('platform administrator with company context sees all applications and can enter opened systems', function () {
     $tenant = Tenant::factory()->create();
     $admin = User::factory()->platformAdmin()->create(['tenant_id' => $tenant->id]);

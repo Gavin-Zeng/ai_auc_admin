@@ -1,5 +1,6 @@
 <?php
 
+use App\Models\Application;
 use App\Models\ApplicationUrl;
 use App\Models\Menu;
 use App\Models\Role;
@@ -17,6 +18,24 @@ test('platform administrator manages companies with dynamic system and member co
         ->component('admin/ResourceIndex')
         ->where('items.data.0.applications_text', $application->name)
         ->where('items.data.0.users_count', 2));
+});
+
+test('new company hides status field and defaults to enabled', function () {
+    $admin = User::factory()->platformAdmin()->create();
+
+    $this->actingAs($admin)
+        ->get(route('tenants.index'))
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page
+            ->where('resource.fields.2.name', 'status')
+            ->where('resource.fields.2.updateOnly', true));
+
+    $this->post(route('tenants.store'), [
+        'name' => 'Enabled Company',
+        'application_ids' => [],
+    ])->assertRedirect();
+
+    expect(Tenant::query()->where('name', 'Enabled Company')->firstOrFail()->status)->toBeTrue();
 });
 
 test('company system removal clears affected role menus', function () {
@@ -50,6 +69,36 @@ test('company administrator creates only users in own company and cannot promote
         ->and($member->is_platform_admin)->toBeFalse();
 });
 
+test('new user hides status field and defaults to enabled', function () {
+    $admin = User::factory()->platformAdmin()->create();
+    $tenant = Tenant::factory()->create();
+    $role = Role::factory()->create(['tenant_id' => $tenant->id]);
+
+    $this->actingAs($admin)
+        ->get(route('users.index'))
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page
+            ->where('resource.fields.2.label', '密码')
+            ->where('resource.fields.2.generatePassword', true)
+            ->where('resource.fields.7.name', 'status')
+            ->where('resource.fields.7.updateOnly', true));
+
+    $this->post(route('users.store'), [
+        'name' => 'Enabled Member',
+        'account' => 'Enabled_01',
+        'password' => 'random-password',
+        'tenant_id' => $tenant->id,
+        'role_id' => $role->id,
+        'is_company_admin' => false,
+        'is_platform_admin' => false,
+    ])->assertRedirect();
+
+    $user = User::query()->where('account', 'Enabled_01')->firstOrFail();
+
+    expect($user->status)->toBeTrue()
+        ->and(Hash::check('random-password', $user->password))->toBeTrue();
+});
+
 test('administrator can reset a user password', function () {
     $admin = User::factory()->platformAdmin()->create();
     [$user, $tenant, $role] = simpleCompanyUser();
@@ -76,6 +125,26 @@ test('role accepts only menus from systems opened for its company', function () 
 
     expect(Role::query()->where('name', 'Operator')->firstOrFail()->menus()->pluck('auc_menus.id')->all())
         ->toBe([$allowedMenu->id]);
+});
+
+test('new role hides status field and defaults to enabled', function () {
+    $admin = User::factory()->platformAdmin()->create();
+    $tenant = Tenant::factory()->create();
+
+    $this->actingAs($admin)
+        ->get(route('roles.index'))
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page
+            ->where('resource.fields.3.name', 'status')
+            ->where('resource.fields.3.updateOnly', true));
+
+    $this->post(route('roles.store'), [
+        'tenant_id' => $tenant->id,
+        'name' => 'Enabled Role',
+        'menu_ids' => [],
+    ])->assertRedirect();
+
+    expect(Role::query()->where('name', 'Enabled Role')->firstOrFail()->status)->toBeTrue();
 });
 
 test('menu hierarchy is limited to two levels within one system', function () {
@@ -127,4 +196,19 @@ test('system stores multiple exact sso callback urls', function () {
 
     expect(ApplicationUrl::query()->count())->toBe(3)
         ->and(ApplicationUrl::query()->where('is_default', true)->count())->toBe(1);
+});
+
+test('platform administrator rotates a system client secret and receives it once', function () {
+    $admin = User::factory()->platformAdmin()->create();
+    $application = Application::factory()->create();
+    $previousSecretHash = $application->client_secret;
+
+    $response = $this->actingAs($admin)->post(route('applications.rotate-secret', $application));
+
+    $response->assertRedirect()->assertInertiaFlash('secret');
+
+    $rotatedSecret = session()->get('inertia.flash_data')['secret'];
+
+    expect($application->refresh()->client_secret)->not->toBe($previousSecretHash)
+        ->and(Hash::check($rotatedSecret, $application->client_secret))->toBeTrue();
 });

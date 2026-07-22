@@ -47,7 +47,7 @@ class RoleController extends Controller
                 ['name' => 'tenant_id', 'label' => '所属公司', 'type' => 'select', 'required' => true],
                 ['name' => 'name', 'label' => '角色名称', 'type' => 'text', 'required' => true],
                 ['name' => 'menu_ids', 'label' => '菜单权限', 'type' => 'multiselect'],
-                ['name' => 'status', 'label' => '状态', 'type' => 'select', 'options' => [1, 0], 'default' => 1],
+                ['name' => 'status', 'label' => '状态', 'type' => 'select', 'options' => [1, 0], 'default' => 1, 'updateOnly' => true],
             ],
             'columns' => ['name', 'company_name', 'menus_text', 'users_count', 'status'],
         ];
@@ -71,12 +71,17 @@ class RoleController extends Controller
 
     protected function rules(Request $request, ?Model $model = null): array
     {
-        return [
+        $rules = [
             'tenant_id' => ['required', 'integer', Rule::exists('auc_tenants', 'id')],
             'name' => ['required', 'string', 'max:120', Rule::unique('auc_roles', 'name')->where('tenant_id', $request->integer('tenant_id'))->ignore($model?->id)],
             'menu_ids' => ['nullable', 'array'], 'menu_ids.*' => ['integer', 'exists:auc_menus,id'],
-            'status' => ['required', 'boolean'],
         ];
+
+        if ($model !== null) {
+            $rules['status'] = ['required', 'boolean'];
+        }
+
+        return $rules;
     }
 
     protected function tenantForWrite(Request $request, mixed $currentTenant, ?Model $model = null): Tenant
@@ -95,6 +100,10 @@ class RoleController extends Controller
     protected function prepareData(Request $request, array $data, ?Model $model = null): array
     {
         unset($data['menu_ids']);
+
+        if ($model === null) {
+            $data['status'] = true;
+        }
 
         return $data;
     }

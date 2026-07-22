@@ -39,7 +39,7 @@ class TenantController extends Controller
             'fields' => [
                 ['name' => 'name', 'label' => '公司名称', 'type' => 'text', 'required' => true],
                 ['name' => 'application_ids', 'label' => '已开通系统', 'type' => 'multiselect'],
-                ['name' => 'status', 'label' => '状态', 'type' => 'select', 'options' => [1, 0], 'default' => 1],
+                ['name' => 'status', 'label' => '状态', 'type' => 'select', 'options' => [1, 0], 'default' => 1, 'updateOnly' => true],
             ],
             'columns' => ['name', 'applications_text', 'users_count', 'status'],
         ];
@@ -54,17 +54,26 @@ class TenantController extends Controller
 
     protected function rules(Request $request, ?Model $model = null): array
     {
-        return [
+        $rules = [
             'name' => ['required', 'string', 'max:120', $this->unique('auc_tenants', 'name', $model)],
             'application_ids' => ['nullable', 'array'],
             'application_ids.*' => ['integer', 'exists:auc_applications,id'],
-            'status' => ['required', 'boolean'],
         ];
+
+        if ($model !== null) {
+            $rules['status'] = ['required', 'boolean'];
+        }
+
+        return $rules;
     }
 
     protected function prepareData(Request $request, array $data, ?Model $model = null): array
     {
         unset($data['application_ids']);
+
+        if ($model === null) {
+            $data['status'] = true;
+        }
 
         return $data;
     }
