@@ -33,7 +33,7 @@ class AucAuthorization
             return false;
         }
 
-        return in_array($permission, ['users.manage', 'roles.manage'], true);
+        return in_array($permission, ['users.manage', 'roles.manage', 'game-permissions.manage'], true);
     }
 
     public function canAccessApplication(User $user, Tenant $tenant, Application $application): bool

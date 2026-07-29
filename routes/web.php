@@ -1,6 +1,8 @@
 <?php
 
 use App\Http\Controllers\Admin\ApplicationController;
+use App\Http\Controllers\Admin\GameController;
+use App\Http\Controllers\Admin\GamePermissionController;
 use App\Http\Controllers\Admin\MenuController;
 use App\Http\Controllers\Admin\RoleController;
 use App\Http\Controllers\Admin\TenantController;
@@ -29,6 +31,10 @@ Route::middleware(['auth'])->group(function () {
     Route::resource('menus', MenuController::class)->only(['index', 'store', 'update', 'destroy'])->middleware('can:menus.manage');
     Route::resource('applications', ApplicationController::class)->only(['index', 'store', 'update', 'destroy'])->middleware('can:applications.manage');
     Route::post('applications/{application}/rotate-secret', [ApplicationController::class, 'rotateSecret'])->middleware('can:applications.manage')->name('applications.rotate-secret');
+    Route::get('games', [GameController::class, 'index'])->middleware('can:games.manage')->name('games.index');
+    Route::get('game-permissions', [GamePermissionController::class, 'redirectToUsers'])->middleware('can:users.manage')->name('game-permissions.index');
+    Route::get('users/{user}/game-permissions', [GamePermissionController::class, 'index'])->middleware('can:users.manage')->name('users.game-permissions.index');
+    Route::put('users/{user}/game-permissions', [GamePermissionController::class, 'update'])->middleware('can:users.manage')->name('users.game-permissions.update');
 });
 
 Route::prefix('demo-subsystem')->name('demo-subsystem.')->group(function () {

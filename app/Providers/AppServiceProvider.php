@@ -88,6 +88,8 @@ class AppServiceProvider extends ServiceProvider
             'roles.manage',
             'menus.manage',
             'applications.manage',
+            'games.manage',
+            'game-permissions.manage',
         ];
     }
 }

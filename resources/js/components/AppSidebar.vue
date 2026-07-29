@@ -31,6 +31,7 @@ import {
 } from '@/components/ui/sidebar';
 import { dashboard } from '@/routes';
 import { index as applicationsIndex } from '@/routes/applications';
+import { index as gamesIndex } from '@/routes/games';
 import { index as menusIndex } from '@/routes/menus';
 import { index as rolesIndex } from '@/routes/roles';
 import { index as tenantsIndex } from '@/routes/tenants';
@@ -80,6 +81,7 @@ const platformFallbackItems: Array<NavItem & { permission: string }> = [
     { title: '角色管理', href: rolesIndex(), icon: ShieldCheck, permission: 'roles.manage' },
     { title: '菜单管理', href: menusIndex(), icon: ListTree, permission: 'menus.manage' },
     { title: '系统管理', href: applicationsIndex(), icon: AppWindow, permission: 'applications.manage' },
+    { title: '游戏管理', href: gamesIndex(), icon: Package, permission: 'games.manage' },
 ];
 
 const mainNavItems = computed<NavItem[]>(() => {

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { Head, router, useForm, usePage } from '@inertiajs/vue3';
-import { KeyRound, Pencil, Plus, Search } from 'lucide-vue-next';
+import { KeyRound, Pencil, Plus, Search, ShieldCheck } from 'lucide-vue-next';
 import { computed, onUnmounted, ref, watch } from 'vue';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -18,6 +18,7 @@ import {
     rotateSecret as rotateApplicationSecret,
     store as storeApplication,
 } from '@/routes/applications';
+import { index as userGamePermissions } from '@/routes/users/game-permissions';
 
 type FieldOption =
     | string
@@ -135,6 +136,11 @@ const displayLabels: Record<string, string> = {
     domain: '域名',
     email: '邮箱',
     group: '分组',
+    'games.app_id': '子游戏 app_id',
+    'games.name': '子游戏名',
+    'games.old_id': '母游戏 id',
+    'games.old_name': '母游戏名',
+    'games.pkg_name': '包名',
     href: '链接',
     is_owner: '公司超管',
     is_company_admin: '公司超管',
@@ -371,7 +377,11 @@ function runSearch() {
 }
 
 function columnLabel(column: string): string {
-    return displayLabels[column] ?? column;
+    return (
+        displayLabels[`${props.resource.name}.${column}`] ??
+        displayLabels[column] ??
+        column
+    );
 }
 
 function toggleMulti(field: FieldConfig, value: string) {
@@ -409,7 +419,15 @@ function statusButtonClass(item: Record<string, any>, column: string): string {
 }
 
 function shouldShowActions(): boolean {
-    return !props.resource.readOnly || props.resource.name === 'applications';
+    return !props.resource.readOnly || props.resource.name === 'applications' || props.resource.name === 'users';
+}
+
+function openGamePermissions(item: Record<string, any>): void {
+    router.visit(
+        userGamePermissions(item.id, {
+            query: item.tenant_id ? { company_id: item.tenant_id } : undefined,
+        }).url,
+    );
 }
 
 function displayValue(item: Record<string, any>, column: string): string {
@@ -773,6 +791,16 @@ onUnmounted(removeFlashListener);
                                                 item.id,
                                         }"
                                     />
+                                </Button>
+                                <Button
+                                    v-if="resource.name === 'users' && !item.is_platform_admin"
+                                    size="icon"
+                                    variant="ghost"
+                                    aria-label="配置游戏权限"
+                                    title="配置游戏权限"
+                                    @click="openGamePermissions(item)"
+                                >
+                                    <ShieldCheck class="size-4" />
                                 </Button>
                             </div>
                         </td>

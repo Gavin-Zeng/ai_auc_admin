@@ -3,6 +3,7 @@
 namespace App\Support;
 
 use App\Models\Application;
+use App\Models\Game;
 use App\Models\Menu;
 use App\Models\Tenant;
 use App\Models\User;
@@ -54,7 +55,7 @@ class PermissionResolver
                 'roles' => ['platform_admin'],
                 'permissions' => ['*'],
                 'permission_version' => $user->updated_at?->getTimestamp() ?? 1,
-                'business_scopes' => [],
+                'business_scopes' => $this->gameScopes($user, $tenant),
                 'permission_sources' => [],
                 'truncated_permissions' => [],
             ];
@@ -69,7 +70,7 @@ class PermissionResolver
                 : array_values(array_filter([$user->role?->name])),
             'permissions' => $menus->pluck('path')->filter()->unique()->values()->all(),
             'permission_version' => $user->updated_at?->getTimestamp() ?? 1,
-            'business_scopes' => [],
+            'business_scopes' => $this->gameScopes($user, $tenant),
             'permission_sources' => [],
             'truncated_permissions' => [],
         ];
@@ -84,5 +85,26 @@ class PermissionResolver
     {
         return $user->isActive() && $tenant->isActive()
             && ($user->isPlatformAdmin() || $user->tenant_id === $tenant->id);
+    }
+
+    private function gameScopes(User $user, Tenant $tenant): array
+    {
+        if (! $user->isActive() || ! $tenant->isActive() || $user->tenant_id !== $tenant->id) {
+            return [];
+        }
+        $games = Game::query()->where('status', true)->whereNotNull('old_id')->whereNotNull('app_id')->get();
+        $permissions = $user->gamePermissions()->where('status', true)->get();
+        if ($permissions->contains('scope_type', 'ALL')) {
+            return $games->map(fn (Game $game) => $this->scope($game, 'ALL'))->values()->all();
+        }
+        $motherKeys = $permissions->where('scope_type', 'MOTHER')->pluck('scope_key');
+        $childKeys = $permissions->where('scope_type', 'CHILD')->pluck('scope_key');
+
+        return $games->filter(fn (Game $game) => $motherKeys->contains($game->old_id) || $childKeys->contains($game->app_id))->map(fn (Game $game) => $this->scope($game, $motherKeys->contains($game->old_id) ? 'MOTHER' : 'CHILD'))->values()->all();
+    }
+
+    private function scope(Game $game, string $scopeType): array
+    {
+        return ['scope_type' => $scopeType, 'mother_game_id' => $game->old_id, 'mother_game_name' => $game->old_name, 'game_id' => $game->app_id, 'game_name' => $game->name, 'game_code' => $game->game];
     }
 }
