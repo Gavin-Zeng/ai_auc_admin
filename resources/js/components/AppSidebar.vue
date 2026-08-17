@@ -8,10 +8,10 @@ import {
     ListTree,
     MessageSquare,
     Package,
-    ShoppingCart,
     ScrollText,
     Settings,
     ShieldCheck,
+    ShoppingCart,
     UserCog,
     Users,
     Wallet,
@@ -20,15 +20,6 @@ import { computed } from 'vue';
 import AppLogo from '@/components/AppLogo.vue';
 import NavMain from '@/components/NavMain.vue';
 import NavUser from '@/components/NavUser.vue';
-import {
-    Sidebar,
-    SidebarContent,
-    SidebarFooter,
-    SidebarHeader,
-    SidebarMenu,
-    SidebarMenuButton,
-    SidebarMenuItem,
-} from '@/components/ui/sidebar';
 import { dashboard } from '@/routes';
 import { index as applicationsIndex } from '@/routes/applications';
 import { index as gamesIndex } from '@/routes/games';
@@ -37,6 +28,17 @@ import { index as rolesIndex } from '@/routes/roles';
 import { index as tenantsIndex } from '@/routes/tenants';
 import { index as usersIndex } from '@/routes/users';
 import type { AucMenuItem, NavItem } from '@/types';
+
+withDefaults(
+    defineProps<{
+        collapsed?: boolean;
+    }>(),
+    { collapsed: false },
+);
+
+const emit = defineEmits<{
+    navigate: [item?: NavItem];
+}>();
 
 const iconMap = {
     'app-window': AppWindow,
@@ -75,13 +77,48 @@ const isCompanyAdmin = computed(
 );
 
 const platformFallbackItems: Array<NavItem & { permission: string }> = [
-    { title: '仪表盘', href: dashboard(), icon: LayoutDashboard, permission: 'dashboard.view' },
-    { title: '公司管理', href: tenantsIndex(), icon: Users, permission: 'tenants.manage' },
-    { title: '用户管理', href: usersIndex(), icon: UserCog, permission: 'users.manage' },
-    { title: '角色管理', href: rolesIndex(), icon: ShieldCheck, permission: 'roles.manage' },
-    { title: '菜单管理', href: menusIndex(), icon: ListTree, permission: 'menus.manage' },
-    { title: '系统管理', href: applicationsIndex(), icon: AppWindow, permission: 'applications.manage' },
-    { title: '游戏管理', href: gamesIndex(), icon: Package, permission: 'games.manage' },
+    {
+        title: '仪表盘',
+        href: dashboard(),
+        icon: LayoutDashboard,
+        permission: 'dashboard.view',
+    },
+    {
+        title: '公司管理',
+        href: tenantsIndex(),
+        icon: Users,
+        permission: 'tenants.manage',
+    },
+    {
+        title: '用户管理',
+        href: usersIndex(),
+        icon: UserCog,
+        permission: 'users.manage',
+    },
+    {
+        title: '角色管理',
+        href: rolesIndex(),
+        icon: ShieldCheck,
+        permission: 'roles.manage',
+    },
+    {
+        title: '菜单管理',
+        href: menusIndex(),
+        icon: ListTree,
+        permission: 'menus.manage',
+    },
+    {
+        title: '系统管理',
+        href: applicationsIndex(),
+        icon: AppWindow,
+        permission: 'applications.manage',
+    },
+    {
+        title: '游戏管理',
+        href: gamesIndex(),
+        icon: Package,
+        permission: 'games.manage',
+    },
 ];
 
 const mainNavItems = computed<NavItem[]>(() => {
@@ -90,13 +127,7 @@ const mainNavItems = computed<NavItem[]>(() => {
     }
 
     if (!hasConfiguredMenus.value) {
-        return [
-            {
-                title: '仪表盘',
-                href: dashboard(),
-                icon: LayoutDashboard,
-            },
-        ];
+        return [{ title: '仪表盘', href: dashboard(), icon: LayoutDashboard }];
     }
 
     return [
@@ -117,35 +148,38 @@ const mainNavItems = computed<NavItem[]>(() => {
 </script>
 
 <template>
-    <Sidebar collapsible="icon" variant="inset">
-        <SidebarHeader>
-            <SidebarMenu>
-                <SidebarMenuItem>
-                    <SidebarMenuButton size="lg" as-child>
-                        <Link :href="dashboard()">
-                            <AppLogo />
-                        </Link>
-                    </SidebarMenuButton>
-                </SidebarMenuItem>
-            </SidebarMenu>
-        </SidebarHeader>
-
-        <SidebarContent>
-            <NavMain :items="mainNavItems" />
-            <div
-                v-if="!hasConfiguredMenus && !hasPlatformAccess"
-                class="mx-2 rounded-md border border-dashed border-sidebar-border/70 p-3 text-xs text-muted-foreground group-data-[collapsible=icon]:hidden"
+    <div class="flex h-full min-h-0 flex-col bg-sidebar">
+        <div
+            class="flex h-(--app-header-height) shrink-0 items-center border-b border-sidebar-border"
+            :class="collapsed ? 'justify-center px-2' : 'px-4'"
+        >
+            <Link
+                :href="dashboard()"
+                class="flex min-w-0 items-center"
+                @click="emit('navigate')"
             >
-                <p class="font-medium text-sidebar-foreground">
-                    当前公司尚未配置菜单
-                </p>
-                <p class="mt-1">请联系管理员配置菜单。</p>
-            </div>
-        </SidebarContent>
+                <AppLogo :compact="collapsed" />
+            </Link>
+        </div>
 
-        <SidebarFooter>
-            <NavUser />
-        </SidebarFooter>
-    </Sidebar>
-    <slot />
+        <NavMain
+            :items="mainNavItems"
+            :collapsed="collapsed"
+            @navigate="(item) => emit('navigate', item)"
+        />
+
+        <div
+            v-if="!hasConfiguredMenus && !hasPlatformAccess && !collapsed"
+            class="mx-3 mb-3 rounded-md border border-dashed border-sidebar-border p-3 text-xs text-muted-foreground"
+        >
+            <p class="font-medium text-sidebar-foreground">
+                当前公司尚未配置菜单
+            </p>
+            <p class="mt-1">请联系管理员配置菜单。</p>
+        </div>
+
+        <div class="shrink-0 border-t border-sidebar-border p-2">
+            <NavUser :collapsed="collapsed" />
+        </div>
+    </div>
 </template>

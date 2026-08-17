@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { Head } from '@inertiajs/vue3';
-import { CheckCircle2, XCircle } from 'lucide-vue-next';
-import { Badge } from '@/components/ui/badge';
+import AppPageHeader from '@/components/app/AppPageHeader.vue';
+import AppStatusTag from '@/components/app/AppStatusTag.vue';
 
 type DiagnosticCheck = {
     key: string;
@@ -11,57 +11,46 @@ type DiagnosticCheck = {
     detail: string | null;
 };
 
-const props = defineProps<{
-    report: {
-        passed: boolean;
-        checks: DiagnosticCheck[];
-    };
-}>();
+defineProps<{ report: { passed: boolean; checks: DiagnosticCheck[] } }>();
 </script>
 
 <template>
     <Head title="运维诊断" />
 
-    <div class="flex h-full flex-1 flex-col gap-4 p-4">
-        <div class="flex flex-wrap items-center justify-between gap-3">
-            <div>
-                <h1 class="text-xl font-semibold tracking-normal">运维诊断</h1>
-                <p class="text-sm text-muted-foreground">
-                    检查默认公司、管理员、权限、菜单、应用和 SSO 接入配置。
-                </p>
-            </div>
-            <Badge :variant="props.report.passed ? 'secondary' : 'destructive'">
-                {{ props.report.passed ? '全部通过' : '存在异常' }}
-            </Badge>
-        </div>
+    <div class="flex flex-col gap-4 p-4 md:p-6">
+        <AppPageHeader
+            title="运维诊断"
+            description="检查默认公司、管理员、权限、菜单、应用和 SSO 接入配置。"
+        >
+            <template #actions
+                ><AppStatusTag
+                    :value="report.passed"
+                    :label="report.passed ? '全部通过' : '存在异常'"
+            /></template>
+        </AppPageHeader>
 
-        <div class="grid gap-3 md:grid-cols-2">
-            <div
-                v-for="check in report.checks"
-                :key="check.key"
-                class="flex items-start gap-3 rounded-lg border border-sidebar-border/70 p-4 dark:border-sidebar-border"
-            >
-                <CheckCircle2
-                    v-if="check.passed"
-                    class="mt-0.5 size-5 text-emerald-600"
-                />
-                <XCircle v-else class="mt-0.5 size-5 text-red-600" />
-
-                <div class="min-w-0 flex-1">
-                    <div class="flex items-center justify-between gap-3">
-                        <p class="font-medium">{{ check.label }}</p>
-                        <Badge :variant="check.passed ? 'secondary' : 'destructive'">
-                            {{ check.passed ? '正常' : '异常' }}
-                        </Badge>
-                    </div>
-                    <p
-                        v-if="check.detail"
-                        class="mt-2 break-all text-sm text-muted-foreground"
+        <ElTable :data="report.checks" row-key="key" class="app-table w-full">
+            <ElTableColumn label="检查项" prop="label" min-width="180" />
+            <ElTableColumn label="状态" width="100" align="center">
+                <template #default="{ row }"
+                    ><AppStatusTag
+                        :value="row.passed"
+                        :label="row.passed ? '正常' : '异常'"
+                /></template>
+            </ElTableColumn>
+            <ElTableColumn label="级别" prop="severity" width="100" />
+            <ElTableColumn label="详情" min-width="260">
+                <template #default="{ row }">
+                    <ElTooltip
+                        v-if="row.detail"
+                        :content="row.detail"
+                        placement="top"
                     >
-                        {{ check.detail }}
-                    </p>
-                </div>
-            </div>
-        </div>
+                        <span class="block truncate">{{ row.detail }}</span>
+                    </ElTooltip>
+                    <span v-else class="text-muted-foreground">—</span>
+                </template>
+            </ElTableColumn>
+        </ElTable>
     </div>
 </template>

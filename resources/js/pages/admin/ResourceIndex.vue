@@ -1,26 +1,28 @@
 <script setup lang="ts">
 import { Head, router, useForm, usePage } from '@inertiajs/vue3';
-import { KeyRound, Pencil, Plus, Search, ShieldCheck } from 'lucide-vue-next';
+import { ElMessageBox } from 'element-plus';
+import {
+    KeyRound,
+    MoreHorizontal,
+    Pencil,
+    Plus,
+    Search,
+    ShieldCheck,
+} from 'lucide-vue-next';
 import { computed, onUnmounted, ref, watch } from 'vue';
-import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
-import { Checkbox } from '@/components/ui/checkbox';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import {
-    Select,
-    SelectContent,
-    SelectItem,
-    SelectTrigger,
-    SelectValue,
-} from '@/components/ui/select';
-import {
-    rotateSecret as rotateApplicationSecret,
-    store as storeApplication,
-} from '@/routes/applications';
+import AppEmptyState from '@/components/app/AppEmptyState.vue';
+import AppPageHeader from '@/components/app/AppPageHeader.vue';
+import AppPagination from '@/components/app/AppPagination.vue';
+import AppStatusTag from '@/components/app/AppStatusTag.vue';
+import { formatDate, formatDateTime, formatNumber } from '@/lib/formatters';
+import { resourceColumn } from '@/lib/resourceColumns';
+import { resourceRoutes } from '@/lib/resourceRoutes';
+import type { ResourceName } from '@/lib/resourceRoutes';
+import { rotateSecret as rotateApplicationSecret } from '@/routes/applications';
 import { index as userGamePermissions } from '@/routes/users/game-permissions';
 
 type FieldOption =
+    | number
     | string
     | {
           value: number | string;
@@ -46,17 +48,15 @@ type FieldConfig = {
     createOnly?: boolean;
     updateOnly?: boolean;
     span?: 1 | 2;
-    group?: string;
     platformOnly?: boolean;
     generatePassword?: boolean;
 };
 
 type ResourceConfig = {
-    name: string;
+    name: ResourceName;
     label: string;
     description?: string;
     createLabel?: string;
-    storeUrl?: string;
     currentTenantId?: number | string | null;
     readOnly?: boolean;
     fields: FieldConfig[];
@@ -64,9 +64,21 @@ type ResourceConfig = {
     actions?: string[];
 };
 
+type ResourceItem = Record<string, unknown> & {
+    id?: number | string;
+    row_key?: number | string;
+    name?: string;
+    status?: boolean | number | string;
+    tenant_id?: number | string | null;
+    is_platform_admin?: boolean;
+};
+
 type PaginatedItems = {
-    data: Record<string, any>[];
-    links: { url: string | null; label: string; active: boolean }[];
+    data: ResourceItem[];
+    current_page?: number;
+    last_page?: number;
+    per_page?: number;
+    total?: number;
 };
 
 const props = defineProps<{
@@ -76,23 +88,20 @@ const props = defineProps<{
     options: Record<string, FieldOption[]>;
 }>();
 
-const editing = ref<Record<string, any> | null>(null);
+const page = usePage();
+const editing = ref<ResourceItem | null>(null);
 const showForm = ref(false);
 const search = ref(props.filters.search ?? '');
 const companyId = ref(
     props.filters.company_id ? String(props.filters.company_id) : 'all',
 );
-const page = usePage();
-const rotatedSecret = ref<string>();
+const rotatedSecret = ref('');
+const secretDialogVisible = ref(false);
 const rotatingApplicationId = ref<number | string | null>(null);
-const removeFlashListener = router.on('flash', (event) => {
-    const flash = (event as CustomEvent).detail?.flash;
-    const secret = flash?.secret;
+const loading = ref(false);
+const loadError = ref('');
 
-    if (typeof secret === 'string') {
-        rotatedSecret.value = secret;
-    }
-});
+const routes = computed(() => resourceRoutes[props.resource.name]);
 const visibleFields = computed(() =>
     props.resource.fields.filter(
         (field) =>
@@ -102,74 +111,40 @@ const visibleFields = computed(() =>
             ) && (editing.value ? !field.createOnly : !field.updateOnly),
     ),
 );
-const formPanelClass = computed(() => 'max-w-4xl');
-
 const blankValues = computed(() =>
     Object.fromEntries(
         props.resource.fields.map((field) => [
             field.name,
             field.type === 'checkbox'
                 ? Boolean(field.default)
-                : field.default !== undefined && field.default !== null
-                  ? String(field.default)
-                  : field.type === 'multiselect'
-                    ? []
+                : field.type === 'multiselect'
+                  ? []
+                  : field.default !== undefined && field.default !== null
+                    ? String(field.default)
                     : '',
         ]),
     ),
 );
-
 const form = useForm<Record<string, any>>({ ...blankValues.value });
 
-const displayLabels: Record<string, string> = {
-    action: '操作',
-    account: '账号',
-    application_id: '所属系统',
-    base_url: '基础地址',
-    client_id: '客户端 ID',
-    applications_text: '已开通系统',
-    code: '编码',
-    company_name: '所属公司',
-    company_names: '所属公司',
-    created_at: '创建时间',
-    description: '描述',
-    domain: '域名',
-    email: '邮箱',
-    group: '分组',
-    'games.app_id': '子游戏 app_id',
-    'games.name': '子游戏名',
-    'games.old_id': '母游戏 id',
-    'games.old_name': '母游戏名',
-    'games.pkg_name': '包名',
-    href: '链接',
-    is_owner: '公司超管',
-    is_company_admin: '公司超管',
-    ip_address: 'IP 地址',
-    is_platform_admin: '平台超管',
-    is_system: '系统内置',
-    is_visible: '是否显示',
-    name: '名称',
-    operated_at: '操作时间',
-    operation_action: '操作动作',
-    operation_object: '操作对象',
-    operator_name: '操作人',
-    parent_id: '父级菜单',
-    parent_name: '父级菜单',
-    path: '菜单路径',
-    redirect_uri: '回调地址',
-    request_params: '请求参数',
-    sort_order: '排序',
-    status: '状态',
-    subject_id: '对象 ID',
-    subject_type: '对象类型',
-    system_name: '所属系统',
-    application_name: '所属系统',
-    role_name: '角色',
-    menus_text: '菜单权限',
-    users_count: '成员数量',
-    urls_count: '地址数量',
-    title: '标题',
-};
+const removeFlashListener = router.on('flash', (event) => {
+    const secret = (event as CustomEvent).detail?.flash?.secret;
+
+    if (typeof secret === 'string') {
+        rotatedSecret.value = secret;
+        secretDialogVisible.value = true;
+    }
+});
+const removeStartListener = router.on('start', () => {
+    loading.value = true;
+    loadError.value = '';
+});
+const removeFinishListener = router.on('finish', () => {
+    loading.value = false;
+});
+const removeNetworkErrorListener = router.on('networkError', () => {
+    loadError.value = '数据加载失败，请检查网络后重试。';
+});
 
 const valueLabels: Record<string, string> = {
     active: '启用',
@@ -179,33 +154,31 @@ const valueLabels: Record<string, string> = {
 };
 
 function optionValue(option: FieldOption): string {
-    return typeof option === 'string' ? option : String(option.value);
+    return typeof option === 'object' ? String(option.value) : String(option);
 }
 
 function optionLabel(option: FieldOption): string {
-    if (typeof option === 'string') {
-        return valueLabels[option] ?? option;
+    if (typeof option === 'object') {
+        return option.label;
     }
 
-    return option.label;
+    return valueLabels[String(option)] ?? String(option);
 }
 
 function fieldOptions(field: FieldConfig): FieldOption[] {
+    const available = field.options ?? props.options[field.name] ?? [];
+
     if (
         props.resource.name === 'users' &&
         field.name === 'role_ids' &&
         (form.tenant_id || form.target_tenant_id)
     ) {
-        return (props.options[field.name] ?? []).filter((option) => {
-            if (typeof option === 'string') {
-                return true;
-            }
-
-            return (
+        return available.filter(
+            (option) =>
+                typeof option !== 'object' ||
                 String(option.tenant_id ?? '') ===
-                String(form.tenant_id || form.target_tenant_id)
-            );
-        });
+                    String(form.tenant_id || form.target_tenant_id),
+        );
     }
 
     if (
@@ -213,25 +186,23 @@ function fieldOptions(field: FieldConfig): FieldOption[] {
         field.name === 'parent_id' &&
         form.tenant_id
     ) {
-        return (props.options[field.name] ?? []).filter((option) => {
-            if (typeof option === 'string') {
-                return true;
-            }
-
-            return String(option.tenant_id ?? '') === String(form.tenant_id);
-        });
+        return available.filter(
+            (option) =>
+                typeof option !== 'object' ||
+                String(option.tenant_id ?? '') === String(form.tenant_id),
+        );
     }
 
-    return field.options ?? props.options[field.name] ?? [];
+    return available;
 }
 
-function generateRandomPassword(field: FieldConfig) {
+function generateRandomPassword(field: FieldConfig): void {
     const characters =
         'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789!@#$%^&*';
-    const randomValues = new Uint32Array(16);
-    crypto.getRandomValues(randomValues);
+    const values = new Uint32Array(16);
+    crypto.getRandomValues(values);
     form[field.name] = Array.from(
-        randomValues,
+        values,
         (value) => characters[value % characters.length],
     ).join('');
 }
@@ -244,7 +215,7 @@ function requestPayload(): Record<string, any> {
     );
 }
 
-function startCreate() {
+function startCreate(): void {
     editing.value = null;
     form.defaults({ ...blankValues.value });
     form.reset();
@@ -252,9 +223,9 @@ function startCreate() {
     showForm.value = true;
 }
 
-function startEdit(item: Record<string, any>) {
+function startEdit(item: ResourceItem): void {
     editing.value = item;
-    const values = { ...blankValues.value };
+    const values: Record<string, any> = { ...blankValues.value };
 
     for (const field of props.resource.fields) {
         const value = item[field.name] ?? values[field.name];
@@ -274,8 +245,33 @@ function startEdit(item: Record<string, any>) {
     showForm.value = true;
 }
 
+function submit(): void {
+    const submitUrl = editing.value?.id
+        ? routes.value.update?.(editing.value.id)
+        : routes.value.store?.();
+
+    if (!submitUrl) {
+        return;
+    }
+
+    form.transform(() => requestPayload());
+    const options = {
+        preserveScroll: true,
+        onSuccess: () => {
+            showForm.value = false;
+        },
+        onFinish: () => form.transform((data) => data),
+    };
+
+    if (editing.value) {
+        form.put(submitUrl, options);
+    } else {
+        form.post(submitUrl, options);
+    }
+}
+
 function statusPayload(
-    item: Record<string, any>,
+    item: ResourceItem,
     status: boolean,
 ): Record<string, any> {
     const fieldNames = new Set(
@@ -286,7 +282,6 @@ function statusPayload(
     const payload = Object.fromEntries(
         Object.entries(item).filter(([key]) => fieldNames.has(key)),
     );
-
     payload.status = status;
 
     if (props.resource.name === 'users') {
@@ -296,63 +291,54 @@ function statusPayload(
     return payload;
 }
 
-function submit() {
-    form.transform(() => requestPayload());
-
-    if (editing.value) {
-        form.put(`/${props.resource.name}/${editing.value.id}`, {
-            preserveScroll: true,
-            onSuccess: () => (showForm.value = false),
-            onFinish: () => form.transform((data) => data),
-        });
-
+async function toggleStatus(item: ResourceItem): Promise<void> {
+    if (props.resource.readOnly || !item.id || !routes.value.update) {
         return;
     }
 
-    const storeUrl =
-        props.resource.name === 'applications'
-            ? storeApplication().url
-            : (props.resource.storeUrl ?? `/${props.resource.name}`);
+    const nextStatus = !Boolean(item.status);
 
-    form.post(storeUrl, {
-        preserveScroll: true,
-        onSuccess: () => (showForm.value = false),
-        onFinish: () => form.transform((data) => data),
-    });
+    try {
+        await ElMessageBox.confirm(
+            nextStatus ? '确定启用该记录吗？' : '确定停用该记录吗？',
+            '确认状态变更',
+            {
+                type: 'warning',
+                confirmButtonText: '确认',
+                cancelButtonText: '取消',
+            },
+        );
+        router.put(
+            routes.value.update(item.id),
+            statusPayload(item, nextStatus),
+            { preserveScroll: true },
+        );
+    } catch {
+        // Cancellation does not require feedback.
+    }
 }
 
-function toggleStatus(item: Record<string, any>) {
-    if (props.resource.readOnly) {
+async function rotateSecret(item: ResourceItem): Promise<void> {
+    if (!item.id) {
         return;
     }
 
-    const currentStatus = Boolean(item.status);
-    const nextStatus = !currentStatus;
-    const confirmed = confirm(
-        currentStatus ? '确定停用该记录吗？' : '确定启用该记录吗？',
-    );
-
-    if (!confirmed) {
+    try {
+        await ElMessageBox.confirm(
+            `确定轮换“${item.name ?? ''}”的客户端密钥吗？旧密钥将立即失效。`,
+            '轮换客户端密钥',
+            {
+                type: 'warning',
+                confirmButtonText: '确认轮换',
+                cancelButtonText: '取消',
+            },
+        );
+    } catch {
         return;
     }
 
-    router.put(
-        `/${props.resource.name}/${item.id}`,
-        statusPayload(item, nextStatus),
-        {
-            preserveScroll: true,
-        },
-    );
-}
-
-function rotateSecret(item: Record<string, any>) {
-    if (!confirm(`确定轮换“${item.name}”的客户端密钥吗？旧密钥将立即失效。`)) {
-        return;
-    }
-
-    rotatedSecret.value = undefined;
+    rotatedSecret.value = '';
     rotatingApplicationId.value = item.id;
-
     router.post(
         rotateApplicationSecret(item.id).url,
         {},
@@ -365,64 +351,40 @@ function rotateSecret(item: Record<string, any>) {
     );
 }
 
-function runSearch() {
+function runSearch(): void {
     router.get(
-        `/${props.resource.name}`,
-        {
-            search: search.value,
+        routes.value.index({
+            search: search.value || undefined,
             company_id: companyId.value === 'all' ? undefined : companyId.value,
-        },
+        }),
+        {},
+        { preserveState: true, preserveScroll: true, replace: true },
+    );
+}
+
+function resetSearch(): void {
+    search.value = '';
+    companyId.value = 'all';
+    runSearch();
+}
+
+function goToPage(currentPage: number): void {
+    router.get(
+        routes.value.index({
+            page: currentPage,
+            search: search.value || undefined,
+            company_id: companyId.value === 'all' ? undefined : companyId.value,
+        }),
+        {},
         { preserveState: true, preserveScroll: true },
     );
 }
 
-function columnLabel(column: string): string {
-    return (
-        displayLabels[`${props.resource.name}.${column}`] ??
-        displayLabels[column] ??
-        column
-    );
-}
-
-function toggleMulti(field: FieldConfig, value: string) {
-    const current = new Set((form[field.name] ?? []).map(String));
-
-    if (current.has(value)) {
-        current.delete(value);
-    } else {
-        current.add(value);
+function openGamePermissions(item: ResourceItem): void {
+    if (!item.id) {
+        return;
     }
 
-    form[field.name] = [...current];
-}
-
-function fieldClass(field: FieldConfig): string {
-    return field.span === 2 ? 'space-y-1.5 md:col-span-2' : 'space-y-1.5';
-}
-
-function statusBadgeClass(item: Record<string, any>, column: string): string {
-    const value = String(item[column] ?? '');
-
-    if (value === 'true' || value === '1') {
-        return 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900/60 dark:bg-emerald-950/40 dark:text-emerald-300';
-    }
-
-    if (value === 'false' || value === '0') {
-        return 'border-rose-200 bg-rose-50 text-rose-700 dark:border-rose-900/60 dark:bg-rose-950/40 dark:text-rose-300';
-    }
-
-    return '';
-}
-
-function statusButtonClass(item: Record<string, any>, column: string): string {
-    return `${statusBadgeClass(item, column)} h-7 rounded-full px-3 text-xs font-medium shadow-none transition hover:brightness-95`;
-}
-
-function shouldShowActions(): boolean {
-    return !props.resource.readOnly || props.resource.name === 'applications' || props.resource.name === 'users';
-}
-
-function openGamePermissions(item: Record<string, any>): void {
     router.visit(
         userGamePermissions(item.id, {
             query: item.tenant_id ? { company_id: item.tenant_id } : undefined,
@@ -430,25 +392,32 @@ function openGamePermissions(item: Record<string, any>): void {
     );
 }
 
-function displayValue(item: Record<string, any>, column: string): string {
+function displayValue(item: ResourceItem, column: string): string {
     const value = item[column];
-    const field = props.resource.fields.find((field) => field.name === column);
+    const meta = resourceColumn(props.resource.name, column);
+    const field = props.resource.fields.find(
+        (candidate) => candidate.name === column,
+    );
 
-    if (
-        [
-            'is_owner',
-            'is_company_admin',
-            'is_platform_admin',
-            'is_system',
-            'is_visible',
-        ].includes(column)
-    ) {
+    if (meta.kind === 'datetime') {
+        return formatDateTime(value);
+    }
+
+    if (meta.kind === 'date') {
+        return formatDate(value);
+    }
+
+    if (meta.kind === 'number') {
+        return formatNumber(value);
+    }
+
+    if (meta.kind === 'boolean') {
         return Boolean(value) ? '是' : '否';
     }
 
     if (field?.type === 'select') {
         const option = fieldOptions(field).find(
-            (option) => optionValue(option) === String(value),
+            (candidate) => optionValue(candidate) === String(value),
         );
 
         if (option) {
@@ -456,23 +425,53 @@ function displayValue(item: Record<string, any>, column: string): string {
         }
     }
 
-    if (column === 'status') {
-        return Boolean(value) ? '启用' : '停用';
-    }
-
-    if (typeof value === 'boolean') {
-        return value ? '是' : '否';
-    }
-
     if (Array.isArray(value)) {
         return value.join(', ');
     }
 
-    if (typeof value === 'string') {
-        return valueLabels[value] ?? value;
+    if (value === null || value === undefined || value === '') {
+        return '—';
     }
 
-    return value ?? '';
+    return valueLabels[String(value)] ?? String(value);
+}
+
+function handleAction(command: string, item: ResourceItem): void {
+    if (command === 'status') {
+        void toggleStatus(item);
+    } else if (command === 'secret') {
+        void rotateSecret(item);
+    } else if (command === 'permissions') {
+        openGamePermissions(item);
+    }
+}
+
+function shouldShowActions(): boolean {
+    return !props.resource.readOnly || props.resource.name === 'users';
+}
+
+function beforeDrawerClose(done: () => void): void {
+    if (form.processing) {
+        return;
+    }
+
+    if (!form.isDirty) {
+        done();
+
+        return;
+    }
+
+    ElMessageBox.confirm('表单尚未保存，确定关闭吗？', '放弃更改', {
+        type: 'warning',
+        confirmButtonText: '放弃更改',
+        cancelButtonText: '继续编辑',
+    })
+        .then(done)
+        .catch(() => undefined);
+}
+
+function copySecret(): void {
+    void window.navigator.clipboard.writeText(rotatedSecret.value);
 }
 
 watch(
@@ -482,355 +481,355 @@ watch(
             return;
         }
 
+        const roleField: FieldConfig = {
+            name: 'role_ids',
+            label: '角色',
+            type: 'multiselect',
+        };
         const allowedRoleIds = new Set(
-            fieldOptions({
-                name: 'role_ids',
-                label: '角色',
-                type: 'multiselect',
-            }).map(optionValue),
+            fieldOptions(roleField).map(optionValue),
         );
-
         form.role_ids = (form.role_ids ?? [])
             .map(String)
-            .filter((roleId: string) => allowedRoleIds.has(roleId));
+            .filter((id: string) => allowedRoleIds.has(id));
     },
 );
 
-onUnmounted(removeFlashListener);
+onUnmounted(() => {
+    removeFlashListener();
+    removeStartListener();
+    removeFinishListener();
+    removeNetworkErrorListener();
+});
 </script>
 
 <template>
     <Head :title="resource.label" />
 
-    <div class="flex h-full flex-1 flex-col gap-4 p-4">
-        <div class="flex flex-wrap items-center justify-between gap-3">
-            <div>
-                <h1 class="text-xl font-semibold tracking-normal">
-                    {{ resource.label }}
-                </h1>
-                <p class="text-sm text-muted-foreground">
-                    {{
-                        resource.description ??
-                        'AUC 集中式权限与 SSO 管理后台。'
-                    }}
-                </p>
-            </div>
-            <Button v-if="!resource.readOnly" @click="startCreate">
-                <Plus class="size-4" />
-                {{ resource.createLabel ?? '新增' }}
-            </Button>
-        </div>
-
-        <div
-            v-if="rotatedSecret"
-            class="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900 dark:border-amber-900/60 dark:bg-amber-950/40 dark:text-amber-100"
+    <div class="flex h-full min-h-0 flex-1 flex-col gap-4 p-4 md:p-6">
+        <AppPageHeader
+            :title="resource.label"
+            :description="resource.description"
         >
-            <div class="font-medium">新的系统密钥只显示一次</div>
-            <div class="mt-2 font-mono break-all">{{ rotatedSecret }}</div>
-        </div>
+            <template v-if="!resource.readOnly" #actions>
+                <ElButton type="primary" @click="startCreate">
+                    <Plus class="size-4" />
+                    {{ resource.createLabel ?? '新增' }}
+                </ElButton>
+            </template>
+        </AppPageHeader>
 
-        <div
+        <ElAlert
             v-if="resource.name === 'menus'"
-            class="rounded-lg border border-sidebar-border/70 p-4 text-sm text-muted-foreground"
-        >
-            菜单按父级菜单和排序字段组成树形结构。隐藏菜单只影响入口可见性，不替代服务端接口鉴权。
-        </div>
+            type="info"
+            :closable="false"
+            title="菜单按父级菜单和排序字段组成树形结构；隐藏仅影响入口可见性，不替代服务端鉴权。"
+        />
 
-        <div class="flex flex-wrap items-center gap-2">
-            <div class="relative max-w-sm flex-1">
-                <Search
-                    class="absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground"
-                />
-                <Input
-                    v-model="search"
-                    class="pl-9"
-                    placeholder="搜索"
-                    @keyup.enter="runSearch"
-                />
-            </div>
-            <Select
-                v-if="(options.company_id ?? []).length > 0"
+        <section
+            class="flex flex-wrap items-center gap-2"
+            aria-label="筛选条件"
+        >
+            <ElInput
+                v-model="search"
+                clearable
+                placeholder="搜索"
+                class="max-w-sm"
+                @keyup.enter="runSearch"
+            >
+                <template #prefix><Search class="size-4" /></template>
+            </ElInput>
+            <ElSelect
+                v-if="(options.company_id ?? []).length"
                 v-model="companyId"
-                @update:model-value="runSearch"
+                class="w-48"
+                @change="runSearch"
             >
-                <SelectTrigger class="w-48">
-                    <SelectValue placeholder="全部公司" />
-                </SelectTrigger>
-                <SelectContent>
-                    <SelectItem value="all">全部公司</SelectItem>
-                    <SelectItem
-                        v-for="option in options.company_id"
-                        :key="optionValue(option)"
-                        :value="optionValue(option)"
-                    >
-                        {{ optionLabel(option) }}
-                    </SelectItem>
-                </SelectContent>
-            </Select>
-            <Button variant="secondary" @click="runSearch">搜索</Button>
-        </div>
-
-        <form
-            v-if="showForm && !resource.readOnly"
-            :class="[
-                'grid gap-2 rounded-lg border border-sidebar-border/70 bg-card/40 p-3 md:grid-cols-2 dark:border-sidebar-border',
-                formPanelClass,
-            ]"
-            @submit.prevent="submit"
-        >
-            <div
-                v-for="field in visibleFields"
-                :key="field.name"
-                :class="fieldClass(field)"
-            >
-                <div class="flex items-center justify-between gap-2">
-                    <Label :for="field.name" class="text-xs font-medium">{{
-                        field.label
-                    }}</Label>
-                    <Button
-                        v-if="field.generatePassword"
-                        type="button"
-                        size="sm"
-                        variant="outline"
-                        class="h-7 px-2 text-xs"
-                        data-test="generate-password"
-                        @click="generateRandomPassword(field)"
-                    >
-                        随机生成密码
-                    </Button>
-                </div>
-
-                <textarea
-                    v-if="field.type === 'textarea'"
-                    :id="field.name"
-                    v-model="form[field.name]"
-                    class="min-h-16 w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm"
+                <ElOption label="全部公司" value="all" />
+                <ElOption
+                    v-for="option in options.company_id"
+                    :key="optionValue(option)"
+                    :label="optionLabel(option)"
+                    :value="optionValue(option)"
                 />
+            </ElSelect>
+            <ElButton type="primary" plain @click="runSearch">搜索</ElButton>
+            <ElButton @click="resetSearch">重置</ElButton>
+        </section>
 
-                <div
-                    v-else-if="field.type === 'checkbox'"
-                    class="flex h-8 items-center gap-2"
-                >
-                    <Checkbox
-                        :id="field.name"
-                        :model-value="Boolean(form[field.name])"
-                        @update:model-value="form[field.name] = $event"
-                    />
-                    <span class="text-sm text-muted-foreground">是</span>
-                </div>
-
-                <div v-else-if="field.type === 'select'" class="space-y-1.5">
-                    <Select v-model="form[field.name]">
-                        <SelectTrigger class="w-full">
-                            <SelectValue :placeholder="field.label" />
-                        </SelectTrigger>
-                        <SelectContent>
-                            <SelectItem
-                                v-for="option in fieldOptions(field)"
-                                :key="optionValue(option)"
-                                :value="optionValue(option)"
-                            >
-                                {{ optionLabel(option) }}
-                            </SelectItem>
-                        </SelectContent>
-                    </Select>
-                    <div
-                        v-if="field.description"
-                        class="text-xs text-muted-foreground"
-                    >
-                        {{ field.description }}
-                    </div>
-                </div>
-
-                <div
-                    v-else-if="field.type === 'multiselect'"
-                    class="max-h-28 min-h-16 space-y-1.5 overflow-y-auto rounded-md border border-sidebar-border/70 bg-background/60 p-2.5"
-                >
-                    <label
-                        v-for="option in fieldOptions(field)"
-                        :key="optionValue(option)"
-                        class="flex items-center gap-2 text-sm"
-                    >
-                        <Checkbox
-                            :model-value="
-                                (form[field.name] ?? [])
-                                    .map(String)
-                                    .includes(optionValue(option))
-                            "
-                            @update:model-value="
-                                toggleMulti(field, optionValue(option))
-                            "
-                        />
-                        <span>{{ optionLabel(option) }}</span>
-                    </label>
-                    <div
-                        v-if="fieldOptions(field).length === 0"
-                        class="text-sm text-muted-foreground"
-                    >
-                        暂无可选角色。
-                    </div>
-                </div>
-
-                <div v-else class="space-y-1.5">
-                    <Input
-                        :id="field.name"
-                        v-model="form[field.name]"
-                        :type="field.type"
-                    />
-                    <div
-                        v-if="field.description"
-                        class="text-xs text-muted-foreground"
-                    >
-                        {{ field.description }}
-                    </div>
-                </div>
-
-                <div
-                    v-if="form.errors[field.name]"
-                    class="text-sm text-red-600"
-                >
-                    {{ form.errors[field.name] }}
-                </div>
-            </div>
-
-            <div
-                class="flex gap-2 border-t border-sidebar-border/70 pt-2 md:col-span-2"
-            >
-                <Button type="submit" :disabled="form.processing">
-                    {{ editing ? '更新' : '创建' }}
-                </Button>
-                <Button type="button" variant="ghost" @click="showForm = false">
-                    取消
-                </Button>
-            </div>
-        </form>
-
-        <div
-            class="overflow-hidden rounded-lg border border-sidebar-border/70 dark:border-sidebar-border"
+        <ElAlert
+            v-if="loadError"
+            type="error"
+            show-icon
+            :closable="false"
+            :title="loadError"
         >
-            <table class="w-full text-sm">
-                <thead class="bg-muted/50 text-left">
-                    <tr>
-                        <th
-                            v-for="column in resource.columns"
-                            :key="column"
-                            class="px-3 py-2 font-medium"
-                        >
-                            {{ columnLabel(column) }}
-                        </th>
-                        <th
-                            v-if="shouldShowActions()"
-                            class="w-32 px-3 py-2 font-medium"
-                        >
-                            操作
-                        </th>
-                    </tr>
-                </thead>
-                <tbody>
-                    <tr
-                        v-for="item in items.data"
-                        :key="item.row_key ?? item.id"
-                        class="border-t border-sidebar-border/70"
+            <ElButton size="small" @click="runSearch">重试</ElButton>
+        </ElAlert>
+
+        <ElTable
+            v-loading="loading"
+            :data="items.data"
+            :row-key="
+                (row: ResourceItem) => String(row.row_key ?? row.id ?? '')
+            "
+            class="app-table w-full"
+            table-layout="fixed"
+        >
+            <template #empty>
+                <AppEmptyState description="暂无符合条件的数据">
+                    <ElButton
+                        v-if="search || companyId !== 'all'"
+                        @click="resetSearch"
+                        >清除筛选</ElButton
                     >
-                        <td
-                            v-for="column in resource.columns"
-                            :key="column"
-                            class="px-3 py-2"
-                        >
-                            <Button
-                                v-if="column === 'status' && !resource.readOnly"
-                                type="button"
-                                variant="outline"
-                                :class="statusButtonClass(item, column)"
-                                @click="toggleStatus(item)"
-                            >
-                                {{ displayValue(item, column) }}
-                            </Button>
-                            <Badge
-                                v-else-if="column === 'status'"
-                                variant="outline"
-                                :class="statusBadgeClass(item, column)"
-                            >
-                                {{ displayValue(item, column) }}
-                            </Badge>
-                            <span v-else>{{ displayValue(item, column) }}</span>
-                        </td>
-                        <td v-if="shouldShowActions()" class="px-3 py-2">
-                            <div class="flex gap-1">
-                                <Button
+                </AppEmptyState>
+            </template>
+
+            <ElTableColumn
+                v-for="column in resource.columns"
+                :key="column"
+                :label="resourceColumn(resource.name, column).label"
+                :align="resourceColumn(resource.name, column).align"
+                :width="resourceColumn(resource.name, column).width"
+                :min-width="resourceColumn(resource.name, column).minWidth"
+            >
+                <template #default="{ row }">
+                    <AppStatusTag
+                        v-if="
+                            resourceColumn(resource.name, column).kind ===
+                            'status'
+                        "
+                        :value="row[column]"
+                    />
+                    <ElTag
+                        v-else-if="
+                            resourceColumn(resource.name, column).kind ===
+                            'boolean'
+                        "
+                        :type="row[column] ? 'success' : 'info'"
+                        effect="plain"
+                        size="small"
+                    >
+                        {{ displayValue(row, column) }}
+                    </ElTag>
+                    <ElTooltip
+                        v-else-if="
+                            resourceColumn(resource.name, column).tooltip
+                        "
+                        :content="displayValue(row, column)"
+                        placement="top"
+                    >
+                        <span class="block truncate">{{
+                            displayValue(row, column)
+                        }}</span>
+                    </ElTooltip>
+                    <span
+                        v-else
+                        :class="{
+                            'text-muted-foreground': resourceColumn(
+                                resource.name,
+                                column,
+                            ).muted,
+                        }"
+                    >
+                        {{ displayValue(row, column) }}
+                    </span>
+                </template>
+            </ElTableColumn>
+
+            <ElTableColumn
+                v-if="shouldShowActions()"
+                label="操作"
+                width="150"
+                fixed="right"
+                align="right"
+            >
+                <template #default="{ row }">
+                    <ElButton
+                        v-if="!resource.readOnly"
+                        link
+                        type="primary"
+                        @click="startEdit(row)"
+                    >
+                        <Pencil class="size-4" />
+                        编辑
+                    </ElButton>
+                    <ElDropdown
+                        trigger="click"
+                        @command="
+                            (command: string) => handleAction(command, row)
+                        "
+                    >
+                        <ElButton text circle aria-label="更多操作"
+                            ><MoreHorizontal class="size-4"
+                        /></ElButton>
+                        <template #dropdown>
+                            <ElDropdownMenu>
+                                <ElDropdownItem
                                     v-if="!resource.readOnly"
-                                    size="icon"
-                                    variant="ghost"
-                                    @click="startEdit(item)"
+                                    command="status"
                                 >
-                                    <Pencil class="size-4" />
-                                </Button>
-                                <Button
+                                    {{ row.status ? '停用' : '启用' }}
+                                </ElDropdownItem>
+                                <ElDropdownItem
                                     v-if="
-                                        !resource.readOnly &&
                                         resource.actions?.includes(
                                             'rotateSecret',
                                         )
                                     "
-                                    size="icon"
-                                    variant="ghost"
-                                    :aria-label="`轮换 ${item.name} 的客户端密钥`"
-                                    :title="
-                                        rotatingApplicationId === item.id
-                                            ? '正在轮换客户端密钥'
-                                            : '轮换客户端密钥'
-                                    "
+                                    command="secret"
                                     :disabled="rotatingApplicationId !== null"
-                                    @click="rotateSecret(item)"
                                 >
-                                    <KeyRound
-                                        class="size-4"
-                                        :class="{
-                                            'animate-pulse':
-                                                rotatingApplicationId ===
-                                                item.id,
-                                        }"
-                                    />
-                                </Button>
-                                <Button
-                                    v-if="resource.name === 'users' && !item.is_platform_admin"
-                                    size="icon"
-                                    variant="ghost"
-                                    aria-label="配置游戏权限"
-                                    title="配置游戏权限"
-                                    @click="openGamePermissions(item)"
+                                    <KeyRound class="mr-2 size-4" />轮换密钥
+                                </ElDropdownItem>
+                                <ElDropdownItem
+                                    v-if="
+                                        resource.name === 'users' &&
+                                        !row.is_platform_admin
+                                    "
+                                    command="permissions"
                                 >
-                                    <ShieldCheck class="size-4" />
-                                </Button>
-                            </div>
-                        </td>
-                    </tr>
-                    <tr v-if="items.data.length === 0">
-                        <td
-                            :colspan="
-                                resource.columns.length +
-                                (shouldShowActions() ? 1 : 0)
-                            "
-                            class="px-3 py-8 text-center text-muted-foreground"
-                        >
-                            暂无数据。
-                        </td>
-                    </tr>
-                </tbody>
-            </table>
-        </div>
+                                    <ShieldCheck class="mr-2 size-4" />游戏权限
+                                </ElDropdownItem>
+                            </ElDropdownMenu>
+                        </template>
+                    </ElDropdown>
+                </template>
+            </ElTableColumn>
+        </ElTable>
 
-        <div class="flex flex-wrap gap-2">
-            <Button
-                v-for="link in items.links"
-                :key="link.label"
-                :disabled="!link.url"
-                :variant="link.active ? 'default' : 'secondary'"
-                size="sm"
-                @click="link.url && router.visit(link.url)"
-            >
-                <span v-html="link.label" />
-            </Button>
-        </div>
+        <AppPagination
+            :current-page="items.current_page ?? 1"
+            :last-page="items.last_page ?? 1"
+            :page-size="items.per_page ?? Math.max(items.data.length, 1)"
+            :total="items.total ?? items.data.length"
+            :disabled="loading"
+            @change="goToPage"
+        />
     </div>
+
+    <ElDrawer
+        v-model="showForm"
+        :title="
+            editing
+                ? `编辑${resource.label}`
+                : (resource.createLabel ?? `新增${resource.label}`)
+        "
+        class="app-form-drawer"
+        :before-close="beforeDrawerClose"
+        destroy-on-close
+    >
+        <ElForm label-position="top" @submit.prevent="submit">
+            <div class="grid gap-x-4 md:grid-cols-2">
+                <ElFormItem
+                    v-for="field in visibleFields"
+                    :key="field.name"
+                    :label="field.label"
+                    :required="field.required"
+                    :error="form.errors[field.name]"
+                    :class="{ 'md:col-span-2': field.span === 2 }"
+                >
+                    <div class="w-full">
+                        <ElInput
+                            v-if="field.type === 'textarea'"
+                            v-model="form[field.name]"
+                            type="textarea"
+                            :rows="4"
+                        />
+                        <ElCheckbox
+                            v-else-if="field.type === 'checkbox'"
+                            v-model="form[field.name]"
+                            >是</ElCheckbox
+                        >
+                        <ElSelect
+                            v-else-if="field.type === 'select'"
+                            v-model="form[field.name]"
+                            class="w-full"
+                            clearable
+                        >
+                            <ElOption
+                                v-for="option in fieldOptions(field)"
+                                :key="optionValue(option)"
+                                :label="optionLabel(option)"
+                                :value="optionValue(option)"
+                            />
+                        </ElSelect>
+                        <ElSelect
+                            v-else-if="field.type === 'multiselect'"
+                            v-model="form[field.name]"
+                            class="w-full"
+                            multiple
+                            collapse-tags
+                            collapse-tags-tooltip
+                        >
+                            <ElOption
+                                v-for="option in fieldOptions(field)"
+                                :key="optionValue(option)"
+                                :label="optionLabel(option)"
+                                :value="optionValue(option)"
+                            />
+                        </ElSelect>
+                        <ElInputNumber
+                            v-else-if="field.type === 'number'"
+                            v-model="form[field.name]"
+                            class="w-full"
+                            controls-position="right"
+                        />
+                        <ElInput
+                            v-else
+                            v-model="form[field.name]"
+                            :type="field.type"
+                            :show-password="field.type === 'password'"
+                        >
+                            <template v-if="field.generatePassword" #append>
+                                <ElButton
+                                    data-test="generate-password"
+                                    @click="generateRandomPassword(field)"
+                                >
+                                    随机生成
+                                </ElButton>
+                            </template>
+                        </ElInput>
+                        <p
+                            v-if="field.description"
+                            class="mt-1 text-xs text-muted-foreground"
+                        >
+                            {{ field.description }}
+                        </p>
+                    </div>
+                </ElFormItem>
+            </div>
+        </ElForm>
+        <template #footer>
+            <ElButton :disabled="form.processing" @click="showForm = false"
+                >取消</ElButton
+            >
+            <ElButton type="primary" :loading="form.processing" @click="submit">
+                {{ editing ? '更新' : '创建' }}
+            </ElButton>
+        </template>
+    </ElDrawer>
+
+    <ElDialog
+        v-model="secretDialogVisible"
+        title="新的系统密钥"
+        width="min(520px, 92vw)"
+    >
+        <ElAlert
+            type="warning"
+            :closable="false"
+            title="密钥只显示一次，请立即保存。"
+        />
+        <ElInput :model-value="rotatedSecret" readonly class="mt-4 font-mono">
+            <template #append>
+                <ElButton @click="copySecret">复制</ElButton>
+            </template>
+        </ElInput>
+        <template #footer>
+            <ElButton type="primary" @click="secretDialogVisible = false"
+                >我已保存</ElButton
+            >
+        </template>
+    </ElDialog>
 </template>

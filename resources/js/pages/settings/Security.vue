@@ -1,97 +1,72 @@
 <script setup lang="ts">
-import { Form, Head } from '@inertiajs/vue3';
+import { Head, useForm } from '@inertiajs/vue3';
 import SecurityController from '@/actions/App/Http/Controllers/Settings/SecurityController';
-import Heading from '@/components/Heading.vue';
-import InputError from '@/components/InputError.vue';
 import PasswordInput from '@/components/PasswordInput.vue';
-import { Button } from '@/components/ui/button';
-import { Label } from '@/components/ui/label';
 import { edit } from '@/routes/security';
 
 defineOptions({
-    layout: {
-        breadcrumbs: [
-            {
-                title: '安全设置',
-                href: edit(),
-            },
-        ],
-    },
+    layout: { breadcrumbs: [{ title: '安全设置', href: edit() }] },
 });
 
+const form = useForm({
+    current_password: '',
+    password: '',
+    password_confirmation: '',
+});
+
+function submit(): void {
+    form.put(SecurityController.update().url, {
+        preserveScroll: true,
+        onSuccess: () => form.reset(),
+    });
+}
 </script>
 
 <template>
     <Head title="安全设置" />
 
-    <h1 class="sr-only">安全设置</h1>
-
-    <div class="space-y-6">
-        <Heading
-            variant="small"
-            title="修改密码"
-            description="建议使用足够长且随机的密码以保护账号安全"
-        />
-
-        <Form
-            v-bind="SecurityController.update.form()"
-            :options="{
-                preserveScroll: true,
-            }"
-            reset-on-success
-            :reset-on-error="[
-                'password',
-                'password_confirmation',
-                'current_password',
-            ]"
-            class="space-y-6"
-            v-slot="{ errors, processing }"
-        >
-            <div class="grid gap-2">
-                <Label for="current_password">当前密码</Label>
+    <section class="space-y-4">
+        <div>
+            <h2 class="text-base font-medium">修改密码</h2>
+            <p class="text-sm text-muted-foreground">
+                建议使用足够长且随机的密码以保护账号安全。
+            </p>
+        </div>
+        <ElForm label-position="top" @submit.prevent="submit">
+            <ElFormItem
+                label="当前密码"
+                required
+                :error="form.errors.current_password"
+            >
                 <PasswordInput
-                    id="current_password"
-                    name="current_password"
-                    class="mt-1 block w-full"
+                    v-model="form.current_password"
                     autocomplete="current-password"
-                    placeholder="当前密码"
                 />
-                <InputError :message="errors.current_password" />
-            </div>
-
-            <div class="grid gap-2">
-                <Label for="password">新密码</Label>
+            </ElFormItem>
+            <ElFormItem label="新密码" required :error="form.errors.password">
                 <PasswordInput
-                    id="password"
-                    name="password"
-                    class="mt-1 block w-full"
+                    v-model="form.password"
                     autocomplete="new-password"
-                    placeholder="新密码"
                 />
-                <InputError :message="errors.password" />
-            </div>
-
-            <div class="grid gap-2">
-                <Label for="password_confirmation">确认密码</Label>
+            </ElFormItem>
+            <ElFormItem
+                label="确认密码"
+                required
+                :error="form.errors.password_confirmation"
+            >
                 <PasswordInput
-                    id="password_confirmation"
-                    name="password_confirmation"
-                    class="mt-1 block w-full"
+                    v-model="form.password_confirmation"
                     autocomplete="new-password"
-                    placeholder="确认密码"
                 />
-                <InputError :message="errors.password_confirmation" />
-            </div>
-
-            <div class="flex items-center gap-4">
-                <Button
-                    :disabled="processing"
-                    data-test="update-password-button"
-                >
-                    保存密码
-                </Button>
-            </div>
-        </Form>
-    </div>
-
+            </ElFormItem>
+            <ElButton
+                type="primary"
+                native-type="submit"
+                :loading="form.processing"
+                data-test="update-password-button"
+            >
+                保存密码
+            </ElButton>
+        </ElForm>
+    </section>
 </template>

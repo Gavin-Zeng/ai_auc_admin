@@ -23,6 +23,7 @@ This application is a Laravel application and its main Laravel ecosystems packag
 - pestphp/pest (PEST) - v4
 - phpunit/phpunit (PHPUNIT) - v12
 - @inertiajs/vue3 (INERTIA_VUE) - v3
+- element-plus (ELEMENT_PLUS) - v2.14
 - tailwindcss (TAILWINDCSS) - v4
 - vue (VUE) - v3
 - @laravel/vite-plugin-wayfinder (WAYFINDER_VITE) - v0
@@ -204,5 +205,61 @@ Use Wayfinder to generate TypeScript functions for Laravel routes. Import from `
 
 Vue components must have a single root element.
 - IMPORTANT: Activate `inertia-vue-development` when working with Inertia Vue client-side patterns.
+
+=== element-plus/admin-ui rules ===
+
+# Element Plus / Admin UI
+
+## UI Foundation and Migration
+
+- Element Plus is the required foundation for common UI across the application. Do not recreate controls that Element Plus already provides.
+- Tailwind CSS is limited to layout, spacing, responsive behavior, and small amounts of application-specific styling. Do not use Tailwind CSS to rebuild existing Element Plus controls.
+- The final migration scope covers every frontend surface, including administration pages, the dashboard, settings, authentication, SSO pages, layouts, and shared components.
+- Migrate one complete page at a time. Do not mix Element Plus and the legacy `resources/js/components/ui` primitives within the same page.
+- Keep the legacy Reka UI components only while unmigrated pages still use them. Remove `resources/js/components/ui` and the Reka UI dependency after their import count reaches zero.
+- Element Plus is globally registered with the Chinese locale and light/dark theme integration. New frontend work must use this configured foundation.
+
+## Application Components
+
+- Before implementing a page or component, search all of `resources/js/components` for reusable components. Reuse an existing component before creating another one.
+- Put new application-level abstractions in the lowercase `resources/js/components/app` directory and name them with an `App` prefix, such as `AppListPage`.
+- Create an App component only when it enforces a stable, repeated application pattern or removes meaningful duplication. Do not create wrappers that merely rename an Element Plus component or pass through its props.
+
+## Required Page States
+
+- Every page must explicitly consider these six states: `Loading`, `Normal`, `Empty`, `Error`, `Submitting`, and `Success`.
+- Model data states as `Loading -> Normal | Empty | Error`, and mutation states as `Submitting -> Success | Error`.
+- Loading states must preserve the final layout and use an appropriate skeleton or loading treatment. Empty states must explain that no data is available and provide a recovery action when one exists. Error states must show an actionable message and a retry path when retrying is possible.
+- While submitting, disable duplicate actions and preserve the user's input. On success, provide clear feedback and refresh only the affected data.
+- A read-only page may mark `Submitting` and `Success` as not applicable. Never invent an action solely to satisfy the state list.
+
+## List Page Structure
+
+- Every list page must use this order: page header with the primary action, filters, feedback, table, and pagination.
+- Keep filter state in the URL. Search and reset behavior must be consistent, and pagination should be server-side by default.
+- Keep the page header compact. Include only a useful title, necessary context, and the primary action.
+
+## Table Rules
+
+- Do not use vertical borders by default, and do not enable striped rows without a concrete comparison need.
+- Place important fields first. De-emphasize IDs and do not place them first unless the ID is the primary business identifier.
+- Use `ElTag` for status values. Truncate long text and expose the full value with `ElTooltip`.
+- Right-align amounts, counts, and other numeric values.
+- Format dates as `YYYY-MM-DD` and date-times as `YYYY-MM-DD HH:mm:ss` through a shared formatter. Clearly label values shown in a non-default timezone.
+- Give every table a stable `row-key`, intentional column widths, loading and empty states, server-side pagination, and an explicit allowlist of sortable fields.
+- Fix the operations column to the right. Show frequent actions directly and move secondary actions into a dropdown menu. Require confirmation for destructive actions.
+
+## Dialog, Drawer, and Page Boundaries
+
+- Use `ElMessageBox` for confirmations.
+- Use `ElDialog` for short, blocking, focused confirmations or forms.
+- Use `ElDrawer` for contextual details and longer editing tasks that should preserve the list context.
+- Navigate to a separate page only for complex, multi-step, or independently addressable tasks. Do not send every row action to a new page.
+- Do not nest dialogs or drawers. Protect unsaved data when a user closes a dirty or submitting surface.
+
+## Efficiency over Decoration
+
+- Do not add decorative cards, gradients, redundant icons, purposeless animation, repeated explanatory copy, or charts that do not support a decision.
+- Optimize for information density, scanability, and short operation paths. Do not add UI solely to make a page look more elaborate.
 
 </laravel-boost-guidelines>

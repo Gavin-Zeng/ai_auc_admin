@@ -20,7 +20,15 @@ return Application::configure(basePath: dirname(__DIR__))
             'demo.permission' => EnsureDemoSubsystemPermission::class,
         ]);
 
-        $middleware->encryptCookies(except: ['appearance', 'sidebar_state']);
+        $middleware->encryptCookies(except: [
+            'appearance',
+            'sidebar_state',
+            'theme_brand',
+            'theme_density',
+            'theme_neutral',
+            'theme_radius',
+            'ui_theme',
+        ]);
         $middleware->validateCsrfTokens(except: [
             'sso/token',
             'sso/logout',

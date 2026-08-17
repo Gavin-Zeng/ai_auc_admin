@@ -1,7 +1,7 @@
 <script setup lang="ts">
-import { Form, Head, Link } from '@inertiajs/vue3';
-import { CheckCircle2, RefreshCw, ShieldCheck } from 'lucide-vue-next';
-import { Button } from '@/components/ui/button';
+import { Head, useForm } from '@inertiajs/vue3';
+import AppLinkButton from '@/components/app/AppLinkButton.vue';
+import { formatDateTime } from '@/lib/formatters';
 import { logout, reports } from '@/routes/demo-subsystem';
 import { refresh } from '@/routes/demo-subsystem/permissions';
 
@@ -17,106 +17,69 @@ defineProps<{
     canViewReports: boolean;
 }>();
 
-const checklist = [
-    'client_id / secret',
-    'redirect_uri',
-    'SSO callback',
-    'token exchange',
-    'auc_user_id',
-    'permission snapshot',
-    'local session',
-    'version refresh',
-];
+const refreshForm = useForm({});
+const logoutForm = useForm({});
 </script>
 
 <template>
     <Head title="Demo 子系统" />
 
-    <main class="min-h-screen bg-background p-6">
-        <section class="mx-auto max-w-4xl space-y-6">
-            <div class="flex flex-wrap items-start justify-between gap-4">
-                <div class="space-y-2">
-                    <div class="flex items-center gap-2 text-sm text-muted-foreground">
-                        <ShieldCheck class="size-4" />
-                        Laravel 子系统接入示例
-                    </div>
-                    <h1 class="text-2xl font-semibold tracking-normal">
-                        已通过 AUC 建立本地 session
-                    </h1>
+    <main class="min-h-screen bg-background p-4 md:p-6">
+        <section class="mx-auto max-w-4xl space-y-5">
+            <header class="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                    <h1 class="text-xl font-semibold">Demo 子系统</h1>
+                    <p class="mt-1 text-sm text-muted-foreground">
+                        已通过 AUC 建立本地 session。
+                    </p>
                 </div>
-
-                <div class="flex flex-wrap gap-2">
-                    <Form v-bind="refresh.form()" #default="{ processing }">
-                        <Button variant="outline" :disabled="processing">
-                            <RefreshCw class="mr-2 size-4" />
-                            刷新权限快照
-                        </Button>
-                    </Form>
-
-                    <Form v-bind="logout.form()" #default="{ processing }">
-                        <Button variant="secondary" :disabled="processing">
-                            子系统退出
-                        </Button>
-                    </Form>
-                </div>
-            </div>
-
-            <div class="grid gap-4 md:grid-cols-2">
-                <div class="rounded-lg border border-sidebar-border/70 p-4">
-                    <div class="text-sm text-muted-foreground">当前用户</div>
-                    <div class="mt-2 font-medium">{{ identity.user.name }}</div>
-                    <div class="text-sm text-muted-foreground">
-                        {{ identity.user.email }}
-                    </div>
-                </div>
-                <div class="rounded-lg border border-sidebar-border/70 p-4">
-                    <div class="text-sm text-muted-foreground">当前租户</div>
-                    <div class="mt-2 font-medium">{{ identity.tenant.name }}</div>
-                    <div class="text-sm text-muted-foreground">
-                        {{ identity.tenant.code }} · {{ identity.tenant.status }}
-                    </div>
-                </div>
-            </div>
-
-            <div class="rounded-lg border border-sidebar-border/70 p-4">
-                <div class="mb-3 text-sm font-medium">权限快照</div>
-                <div class="grid gap-3 text-sm md:grid-cols-3">
-                    <div>
-                        <div class="text-muted-foreground">角色</div>
-                        <div class="font-semibold">{{ identity.roles.length }}</div>
-                    </div>
-                    <div>
-                        <div class="text-muted-foreground">权限</div>
-                        <div class="font-semibold">
-                            {{ identity.permissions.length }}
-                        </div>
-                    </div>
-                    <div>
-                        <div class="text-muted-foreground">版本</div>
-                        <div class="font-semibold">
-                            {{ identity.permission_version }}
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <div class="rounded-lg border border-sidebar-border/70 p-4">
-                <div class="mb-3 text-sm font-medium">接入检查清单</div>
-                <div class="grid gap-2 text-sm md:grid-cols-2">
-                    <div
-                        v-for="item in checklist"
-                        :key="item"
-                        class="flex items-center gap-2 rounded-md bg-muted/40 px-3 py-2"
+                <div class="flex gap-2">
+                    <ElButton
+                        :loading="refreshForm.processing"
+                        @click="refreshForm.post(refresh().url)"
+                        >刷新权限快照</ElButton
                     >
-                        <CheckCircle2 class="size-4 text-emerald-600" />
-                        <span>{{ item }}</span>
-                    </div>
+                    <ElButton
+                        :loading="logoutForm.processing"
+                        @click="logoutForm.post(logout().url)"
+                        >子系统退出</ElButton
+                    >
                 </div>
-            </div>
+            </header>
 
-            <Button v-if="canViewReports" as-child>
-                <Link :href="reports()">访问受保护报表</Link>
-            </Button>
+            <ElDescriptions :column="2" border>
+                <ElDescriptionsItem label="用户">{{
+                    identity.user.name
+                }}</ElDescriptionsItem>
+                <ElDescriptionsItem label="邮箱">{{
+                    identity.user.email
+                }}</ElDescriptionsItem>
+                <ElDescriptionsItem label="租户">{{
+                    identity.tenant.name
+                }}</ElDescriptionsItem>
+                <ElDescriptionsItem label="租户编码">{{
+                    identity.tenant.code
+                }}</ElDescriptionsItem>
+                <ElDescriptionsItem label="角色数量">{{
+                    identity.roles.length
+                }}</ElDescriptionsItem>
+                <ElDescriptionsItem label="权限数量">{{
+                    identity.permissions.length
+                }}</ElDescriptionsItem>
+                <ElDescriptionsItem label="权限版本">{{
+                    identity.permission_version
+                }}</ElDescriptionsItem>
+                <ElDescriptionsItem label="会话过期时间">{{
+                    formatDateTime(identity.session_expires_at)
+                }}</ElDescriptionsItem>
+            </ElDescriptions>
+
+            <AppLinkButton
+                v-if="canViewReports"
+                :href="reports()"
+                type="primary"
+                >访问受保护报表</AppLinkButton
+            >
         </section>
     </main>
 </template>

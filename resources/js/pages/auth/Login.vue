@@ -1,110 +1,87 @@
 <script setup lang="ts">
-import { Form, Head } from '@inertiajs/vue3';
-import InputError from '@/components/InputError.vue';
+import { Head, useForm } from '@inertiajs/vue3';
 import PasswordInput from '@/components/PasswordInput.vue';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Spinner } from '@/components/ui/spinner';
 import { store } from '@/routes/login';
 
 defineOptions({
-    layout: {
-        title: 'AUC 后台',
-        description: '',
-    },
+    layout: { title: 'AUC 后台', description: '' },
 });
 
 defineProps<{
     status?: string;
     canResetPassword: boolean;
     canRegister: boolean;
-    captcha: {
-        question: string;
-    };
+    captcha: { question: string };
 }>();
+
+const form = useForm({
+    account: '',
+    password: '',
+    captcha_answer: '',
+    remember: true,
+});
+
+function submit(): void {
+    form.post(store().url, {
+        onSuccess: () => form.reset('password', 'captcha_answer'),
+    });
+}
 </script>
 
 <template>
     <Head title="登录" />
 
-    <div
+    <ElAlert
         v-if="status"
-        class="mb-4 text-center text-sm font-medium text-green-600"
-    >
-        {{ status }}
-    </div>
+        type="success"
+        :closable="false"
+        :title="status"
+        class="mb-4"
+    />
 
-    <Form
-        v-bind="store.form()"
-        :reset-on-success="['password', 'captcha_answer']"
-        v-slot="{ errors, processing }"
-        class="flex flex-col gap-6"
-    >
-        <input type="hidden" name="remember" value="1" />
-
-        <div class="grid gap-6">
-            <div class="grid gap-2">
-                <Label for="account">账号</Label>
-                <Input
-                    id="account"
-                    type="text"
-                    name="account"
-                    required
-                    autofocus
-                    :tabindex="1"
-                    autocomplete="username"
-                    placeholder="Account"
+    <ElForm label-position="top" @submit.prevent="submit">
+        <ElFormItem label="账号" required :error="form.errors.account">
+            <ElInput
+                v-model="form.account"
+                autofocus
+                autocomplete="username"
+                placeholder="请输入账号"
+                tabindex="1"
+            />
+        </ElFormItem>
+        <ElFormItem label="密码" required :error="form.errors.password">
+            <PasswordInput
+                v-model="form.password"
+                autocomplete="current-password"
+                placeholder="请输入密码"
+                tabindex="2"
+            />
+        </ElFormItem>
+        <ElFormItem label="验证码" required :error="form.errors.captcha_answer">
+            <div class="grid w-full grid-cols-[1fr_100px] gap-3">
+                <ElInput
+                    v-model="form.captcha_answer"
+                    inputmode="numeric"
+                    autocomplete="off"
+                    placeholder="计算结果"
+                    tabindex="3"
                 />
-                <InputError :message="errors.account" />
-            </div>
-
-            <div class="grid gap-2">
-                <Label for="password">密码</Label>
-                <PasswordInput
-                    id="password"
-                    name="password"
-                    required
-                    :tabindex="2"
-                    autocomplete="current-password"
-                    placeholder="密码"
-                />
-                <InputError :message="errors.password" />
-            </div>
-
-            <div class="grid gap-2">
-                <Label for="captcha_answer">验证码</Label>
-                <div class="grid grid-cols-[1fr_96px] gap-3">
-                    <Input
-                        id="captcha_answer"
-                        type="text"
-                        name="captcha_answer"
-                        required
-                        inputmode="numeric"
-                        :tabindex="3"
-                        autocomplete="off"
-                        placeholder="结果"
-                    />
-                    <div
-                        class="flex h-9 items-center justify-center rounded-md border border-input bg-muted px-2 font-mono text-sm whitespace-nowrap text-muted-foreground"
-                        aria-label="验证码题目"
-                    >
-                        {{ captcha.question }}
-                    </div>
+                <div
+                    class="flex items-center justify-center rounded-md border border-border bg-muted font-mono text-sm"
+                >
+                    {{ captcha.question }}
                 </div>
-                <InputError :message="errors.captcha_answer" />
             </div>
-
-            <Button
-                type="submit"
-                class="mt-2 w-full"
-                :tabindex="4"
-                :disabled="processing"
-                data-test="login-button"
-            >
-                <Spinner v-if="processing" />
-                登录
-            </Button>
-        </div>
-    </Form>
+        </ElFormItem>
+        <ElButton
+            type="primary"
+            native-type="submit"
+            class="w-full"
+            :loading="form.processing"
+            data-test="login-button"
+            tabindex="4"
+        >
+            登录
+        </ElButton>
+    </ElForm>
 </template>

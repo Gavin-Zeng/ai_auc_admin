@@ -1,8 +1,9 @@
 <script setup lang="ts">
 import { Head } from '@inertiajs/vue3';
-import { ExternalLink, ShieldCheck } from 'lucide-vue-next';
-import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
+import { AppWindow, ExternalLink, Globe2, Headset } from 'lucide-vue-next';
+import type { LucideIcon } from 'lucide-vue-next';
+import AppEmptyState from '@/components/app/AppEmptyState.vue';
+import AppStatusTag from '@/components/app/AppStatusTag.vue';
 import { dashboard } from '@/routes';
 import type { AucApplication, AucTenant } from '@/types';
 
@@ -17,125 +18,107 @@ defineProps<{
 }>();
 
 defineOptions({
-    layout: {
-        breadcrumbs: [
-            {
-                title: 'AUC 工作台',
-                href: dashboard(),
-            },
-        ],
-    },
+    layout: { breadcrumbs: [{ title: 'AUC 工作台', href: dashboard() }] },
 });
+
+function applicationIcon(application: AucApplication): LucideIcon {
+    const applicationKey =
+        `${application.client_id} ${application.name}`.toLowerCase();
+
+    if (applicationKey.includes('gm') || application.name.includes('客服')) {
+        return Headset;
+    }
+
+    if (
+        applicationKey.includes('overseas') ||
+        application.name.includes('海外')
+    ) {
+        return Globe2;
+    }
+
+    return AppWindow;
+}
 </script>
 
 <template>
     <Head title="AUC 工作台" />
 
-    <div class="flex h-full flex-1 flex-col gap-6 overflow-x-auto p-4">
-        <section class="grid gap-4 lg:grid-cols-[1fr_320px]">
-            <div class="space-y-3">
-                <div class="flex flex-wrap items-center gap-2">
-                    <h1 class="text-2xl font-semibold tracking-normal">
-                        AUC 工作台
-                    </h1>
-                    <Badge
-                        v-if="!identity.roles.includes('platform_admin')"
-                        variant="secondary"
-                    >
-                        {{ tenant?.name }}
-                    </Badge>
-                </div>
-                <p class="max-w-3xl text-sm text-muted-foreground">
-                    {{
-                        identity.roles.includes('platform_admin')
-                            ? '查看并管理平台全部业务系统。'
-                            : '当前公司的统一认证、访问权限和业务系统入口。'
-                    }}
-                </p>
-            </div>
+    <div class="flex flex-col gap-5 p-4 md:p-6">
+        <section>
+            <h2 class="mb-3 text-base font-medium">业务系统</h2>
             <div
-                class="rounded-lg border border-sidebar-border/70 p-4 dark:border-sidebar-border"
+                v-if="applications.length"
+                class="grid gap-3 md:grid-cols-2 xl:grid-cols-3"
             >
-                <div class="flex items-center gap-2 text-sm font-medium">
-                    <ShieldCheck class="size-4" />
-                    权限快照
-                </div>
-                <div class="mt-3 grid grid-cols-3 gap-3 text-sm">
-                    <div>
-                        <div class="text-muted-foreground">角色</div>
-                        <div class="font-semibold">
-                            {{ identity.roles.length }}
-                        </div>
-                    </div>
-                    <div>
-                        <div class="text-muted-foreground">权限</div>
-                        <div class="font-semibold">
-                            {{ identity.permissions.length }}
-                        </div>
-                    </div>
-                    <div>
-                        <div class="text-muted-foreground">版本</div>
-                        <div class="font-semibold">
-                            {{ identity.permission_version }}
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </section>
-
-        <div class="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-            <component
-                v-for="application in applications"
-                :key="application.id"
-                :is="application.action_url ? 'a' : 'div'"
-                :href="application.action_url ?? undefined"
-                :target="application.action_url ? '_blank' : undefined"
-                :rel="
-                    application.action_url ? 'noopener noreferrer' : undefined
-                "
-                class="group rounded-lg border border-sidebar-border/70 bg-background p-4 transition dark:border-sidebar-border"
-                :class="
-                    application.action_url
-                        ? 'hover:border-primary/60 hover:shadow-sm'
-                        : 'opacity-70'
-                "
-            >
-                <div class="flex items-start justify-between gap-4">
-                    <div>
-                        <div class="text-base font-semibold">
-                            {{ application.name }}
-                        </div>
-                        <div class="mt-2 flex flex-wrap gap-2">
-                            <Badge variant="outline">
-                                {{ application.status ? '启用' : '停用' }}
-                            </Badge>
-                            <Badge
-                                v-if="identity.roles.includes('platform_admin')"
-                                variant="secondary"
+                <ElCard
+                    v-for="application in applications"
+                    :key="application.id"
+                    shadow="never"
+                >
+                    <div class="flex items-start justify-between gap-3">
+                        <div class="flex min-w-0 items-start gap-3">
+                            <div
+                                class="flex size-10 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary"
+                                aria-hidden="true"
                             >
-                                {{
-                                    application.is_available
-                                        ? '可进入'
-                                        : '待配置'
-                                }}
-                            </Badge>
+                                <component
+                                    :is="applicationIcon(application)"
+                                    class="size-5"
+                                />
+                            </div>
+                            <div class="min-w-0">
+                                <h3 class="font-medium">
+                                    {{ application.name }}
+                                </h3>
+                                <p
+                                    class="mt-1 truncate text-sm text-muted-foreground"
+                                >
+                                    {{ application.base_url ?? '未配置地址' }}
+                                </p>
+                                <div class="mt-3 flex gap-2">
+                                    <AppStatusTag :value="application.status" />
+                                    <ElTag
+                                        v-if="
+                                            identity.roles.includes(
+                                                'platform_admin',
+                                            )
+                                        "
+                                        type="info"
+                                        effect="plain"
+                                        size="small"
+                                    >
+                                        {{
+                                            application.is_available
+                                                ? '可进入'
+                                                : '待配置'
+                                        }}
+                                    </ElTag>
+                                </div>
+                            </div>
                         </div>
-                        <div class="mt-1 text-sm text-muted-foreground">
-                            {{ application.base_url }}
-                        </div>
+                        <ElTooltip
+                            :content="
+                                application.action_url
+                                    ? '在新窗口打开'
+                                    : '系统尚未配置'
+                            "
+                        >
+                            <ElButton
+                                circle
+                                :disabled="!application.action_url"
+                                :tag="application.action_url ? 'a' : 'button'"
+                                :href="application.action_url ?? undefined"
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                aria-label="打开系统"
+                            >
+                                <ExternalLink class="size-4" />
+                            </ElButton>
+                        </ElTooltip>
                     </div>
-                    <Button size="icon" variant="ghost" class="shrink-0">
-                        <ExternalLink class="size-4" />
-                    </Button>
-                </div>
-            </component>
-        </div>
-
-        <div
-            v-if="applications.length === 0"
-            class="rounded-lg border border-dashed border-sidebar-border/70 p-8 text-center text-sm text-muted-foreground dark:border-sidebar-border"
-        >
-            暂无可访问系统。
-        </div>
+                </ElCard>
+            </div>
+            <AppEmptyState v-else description="暂无可访问系统" />
+        </section>
     </div>
 </template>
